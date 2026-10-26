@@ -40,6 +40,7 @@
     <svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>
   </button>
 </header>
+<div id="review-badge" class="review-badge" hidden></div>
 <nav id="chips" class="chips" hidden></nav>
 <canvas id="minimap" hidden aria-label="미니맵 (탭하여 이동)"></canvas>
 
@@ -50,6 +51,8 @@
     <svg class="i" viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M9 5v8h6M15 9v10"/></svg>도면</button>
   <button data-toggle="measure" aria-pressed="false">
     <svg class="i" viewBox="0 0 24 24"><path d="m3 17 14-14 4 4L7 21z"/><path d="m7 9 2 2m1-5 2 2m1-5 2 2"/></svg>거리</button>
+  <button id="btn-annot" hidden aria-pressed="false">
+    <svg class="i" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>표시</button>
   <button id="btn-reset">
     <svg class="i" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg>처음</button>
 </aside>
@@ -64,6 +67,14 @@
 </div>
 
 <div class="legend"><span id="lg-ent" hidden><i class="lg-ent"></i>진입구</span><span><i class="lg-door"></i>문</span><span><i class="lg-win"></i>창</span><span id="scale"></span></div>
+<div id="annot-bar" class="annot-bar" hidden>
+  <div class="ab-kinds" id="ab-kinds" role="radiogroup" aria-label="표시 종류"></div>
+  <div class="ab-row">
+    <input id="annot-text" maxlength="30" placeholder="이름 (예: 침실1, 동쪽 계단)" autocomplete="off">
+    <button class="btn primary" id="annot-done">완료</button>
+  </div>
+  <p id="annot-msg" class="ab-msg">평면 도면에서 위치를 탭하세요 · 표시를 탭하면 삭제</p>
+</div>
 <div id="hint" class="hint"></div>
 <div id="labels"></div>
 

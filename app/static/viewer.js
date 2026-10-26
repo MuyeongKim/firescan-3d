@@ -53,7 +53,7 @@ planCtl.enabled = false;
 
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x15191e, transparent: true, opacity: 0.55 });
 
-const state = { mode: 'orbit', floor: 0, all: false, xray: false, plan: true, measure: false };
+const state = { mode: 'orbit', floor: 0, all: false, xray: false, plan: true, measure: false, annot: false };
 let meta = null;
 const floors = [];
 let dirty = true;
@@ -71,6 +71,18 @@ async function init() {
     return;
   }
   $('#title').textContent = meta.name || '건물 내부구조';
+  // 업로드한 사람이 자동 인식 결과를 도면과 대조했는지 알려 준다(확인 전이면 구조를 그대로 믿지 않도록)
+  const badge = $('#review-badge');
+  if (meta.confirmed && meta.confirmed.at) {
+    badge.textContent = `✓ 인식 결과 확인됨 · ${new Date(meta.confirmed.at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}${meta.confirmed.note ? ' · ' + meta.confirmed.note : ''}`;
+    badge.className = 'review-badge ok';
+  } else {
+    badge.textContent = '⚠ 자동 인식 결과 · 사람이 아직 확인하지 않았습니다. 실제 구조와 다를 수 있습니다';
+    badge.className = 'review-badge warn';
+  }
+  if (meta.expires) badge.textContent += ` · ${new Date(meta.expires).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })} 자동 삭제`;
+  badge.hidden = false;
+  initAnnots();
   buildChips();
 
   const loader = new GLTFLoader();
@@ -536,6 +548,7 @@ function pick(e) {
 function onTap(e) {
   const hit = pick(e);
   if (!hit) return;
+  if (state.annot) { placeAnnot(hit); return; }
   if (state.measure) { addMeasure(hit.point); return; }
   if (state.mode === 'walk') walkTo(hit.point);
 }
@@ -580,6 +593,7 @@ function addMeasure(p) {
 }
 
 function updateOverlay() {
+  positionAnnots();
   // 마커 크기를 화면 기준으로 일정하게
   const scale = (p) => (camera.isOrthographicCamera ? (ortho.top / ortho.zoom) * 0.012 : camera.position.distanceTo(p) * 0.012);
   measure.group.children.forEach((o) => { if (o.userData.marker) o.scale.setScalar(Math.max(0.03, scale(o.position))); });
@@ -591,6 +605,140 @@ function updateOverlay() {
     measure.label.hidden = m.z > 1;
   }
 }
+
+// ------------------------------------------------------------ 방 이름·소방시설 표시
+// 업로드한 기기(삭제 토큰이 저장된 곳)에서만 편집하고, 링크로 여는 대원은 읽기만 한다.
+const KINDS = {
+  room: ['방 이름', '#e8edf2'], stairs: ['계단', '#b08cff'], exit: ['비상구', '#22c55e'], hydrant: ['소화전', '#ff5c5c'],
+  extinguisher: ['소화기', '#ff8a4c'], firedoor: ['방화문', '#ffb020'], hazard: ['위험', '#ff3b3b'],
+};
+const annot = { items: [], els: new Map(), kind: 'room', token: '', timer: null };
+
+function ownerToken() {
+  try {
+    const list = JSON.parse(localStorage.getItem('fs3d.recent') || '[]');
+    return list.find((x) => x.id === MID)?.token || '';
+  } catch { return ''; }
+}
+
+function initAnnots() {
+  annot.items = (meta.annotations || []).map((a) => ({ ...a }));
+  annot.token = ownerToken();
+  $('#btn-annot').hidden = !annot.token;
+  const kinds = $('#ab-kinds');
+  for (const [k, [label, color]] of Object.entries(KINDS)) {
+    const b = document.createElement('button');
+    b.dataset.kind = k; b.textContent = label; b.style.setProperty('--kc', color);
+    b.setAttribute('role', 'radio');
+    b.onclick = () => { annot.kind = k; syncKindButtons(); $('#annot-text').focus(); };
+    kinds.appendChild(b);
+  }
+  syncKindButtons();
+  renderAnnots();
+}
+function syncKindButtons() {
+  document.querySelectorAll('#ab-kinds button').forEach((b) => {
+    const on = b.dataset.kind === annot.kind;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', on);
+  });
+  $('#annot-text').placeholder = annot.kind === 'room' ? '방 이름 (예: 침실1, 기계실)' : '메모(선택) 예) 동쪽 계단';
+}
+
+function renderAnnots() {
+  const box = $('#labels');
+  for (const el of annot.els.values()) el.remove();
+  annot.els.clear();
+  for (const a of annot.items) {
+    const [label, color] = KINDS[a.kind] || KINDS.room;
+    const el = document.createElement('div');
+    el.className = 'alab';
+    el.style.setProperty('--kc', color);
+    const dot = document.createElement('i');
+    const txt = document.createElement('span');
+    txt.textContent = a.kind === 'room' ? a.text : (a.text ? `${label} · ${a.text}` : label);
+    el.append(dot, txt);
+    el.onclick = (e) => {
+      if (!state.annot) return;
+      e.stopPropagation();
+      if (!confirm(`'${txt.textContent}' 표시를 삭제할까요?`)) return;
+      annot.items = annot.items.filter((x) => x.id !== a.id);
+      renderAnnots(); saveAnnots();
+    };
+    box.appendChild(el);
+    annot.els.set(a.id, el);
+  }
+  requestRender();
+}
+
+const _av = new V3();
+function positionAnnots() {
+  if (!annot.els.size) return;
+  const r = canvas.getBoundingClientRect();
+  for (const a of annot.items) {
+    const el = annot.els.get(a.id);
+    const F = floors[a.floor];
+    if (!el) continue;
+    if (!F || !F.group.visible) { el.hidden = true; continue; }
+    _av.set(a.x, F.group.position.y + (state.mode === 'walk' ? 1.3 : 0.25), a.z);
+    // 1인칭에서는 가까운 것만 보여 화면이 어지럽지 않게 한다
+    const near = state.mode !== 'walk' || camera.position.distanceTo(_av) < 14;
+    _av.project(camera);
+    if (_av.z > 1 || !near) { el.hidden = true; continue; }
+    el.hidden = false;
+    el.style.left = `${r.left + ((_av.x + 1) / 2) * r.width}px`;
+    el.style.top = `${r.top + ((1 - _av.y) / 2) * r.height}px`;
+  }
+}
+
+function annotMsg(text, bad) {
+  const m = $('#annot-msg');
+  m.textContent = text;
+  m.className = bad ? 'ab-msg bad' : 'ab-msg';
+}
+
+function placeAnnot(hit) {
+  const text = $('#annot-text').value.trim().slice(0, 30);
+  if (annot.kind === 'room' && !text) { annotMsg('방 이름을 먼저 입력하세요', true); $('#annot-text').focus(); return; }
+  if (annot.items.length >= 60) { annotMsg('표시는 최대 60개입니다. 하나를 삭제하세요', true); return; }
+  const fi = floors.findIndex((F) => F && F.pick.includes(hit.object));
+  if (fi < 0) return;
+  annot.items.push({ id: Math.random().toString(36).slice(2, 10), floor: fi, kind: annot.kind,
+    x: +hit.point.x.toFixed(2), z: +hit.point.z.toFixed(2), text });
+  if (annot.kind === 'room') $('#annot-text').value = '';
+  renderAnnots(); saveAnnots();
+}
+
+function saveAnnots() {
+  annotMsg('저장 중…');
+  clearTimeout(annot.timer);
+  annot.timer = setTimeout(async () => {
+    let res = null;
+    try {
+      res = await fetch(`${BASE}/api/models/${MID}/annotations`, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Delete-Token': annot.token },
+        body: JSON.stringify({ items: annot.items }) });
+    } catch { /* 네트워크 오류 */ }
+    if (res && res.ok) annotMsg(`저장됨 ✓ (${annot.items.length}개)`);
+    else annotMsg(`저장하지 못했습니다${res ? ' (' + (await res.json().catch(() => ({}))).detail + ')' : ' · 연결 확인'}. 다음 표시 때 다시 저장합니다`, true);
+  }, 350);
+}
+
+function setAnnotMode(on) {
+  state.annot = on;
+  document.body.classList.toggle('annot-on', on);
+  $('#annot-bar').hidden = !on;
+  $('#btn-annot').classList.toggle('on', on);
+  $('#btn-annot').setAttribute('aria-pressed', on);
+  if (on) {
+    state.measure = false; clearMeasure(); applyToggles();
+    if (state.mode !== 'top') setMode('top');
+    if (!state.plan) { state.plan = true; applyToggles(); }
+    annotMsg('평면 도면에서 위치를 탭하세요 · 표시를 탭하면 삭제');
+  }
+  requestRender();
+}
+$('#btn-annot').addEventListener('click', () => setAnnotMode(!state.annot));
+$('#annot-done').addEventListener('click', () => setAnnotMode(false));
 
 // ------------------------------------------------------------ 미니맵
 const mm = $('#minimap');

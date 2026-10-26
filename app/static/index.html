@@ -42,6 +42,8 @@
       <input id="code" maxlength="32" placeholder="예) K7PQ2MXA" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
     <label class="field"><span>건물명 / 주소 <em>선택 · 링크 제목에 표시</em></span>
       <input id="name" maxlength="80" placeholder="예) OO아파트 101동 1203호" autocomplete="off"></label>
+    <label class="field"><span>보관 기간 <em>도면은 민감 정보입니다 · 기간이 지나면 자동 삭제 · 기억됨</em></span>
+      <select id="ttl"><option value="1">1일 — 출동이 끝나면 곧 삭제</option><option value="7">7일</option><option value="30">30일</option></select></label>
     <details>
       <summary>세부 설정</summary>
       <label class="field"><span>건물 가로 길이 (m) <em>알면 입력 · 축척 보정</em></span>
@@ -55,25 +57,55 @@
   </section>
 
   <section class="card result" id="result" hidden>
-    <div class="result-head"><span class="dot"></span>링크가 준비됐습니다<small id="r-time"></small></div>
-    <img id="r-prev" class="r-prev" alt="생성된 평면 미리보기">
-    <div class="linkbox"><input id="r-url" readonly aria-label="공유 링크"><button class="btn" id="r-copy">복사</button></div>
-    <div class="row3">
-      <button class="btn primary" id="r-share"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>공유하기</button>
-      <a class="btn" id="r-open" target="_blank" rel="noopener">열기</a>
-      <button class="btn" id="r-new">새 도면</button>
+    <div class="result-head"><span class="dot" id="r-dot"></span><span id="r-head">인식 결과를 확인해 주세요</span><small id="r-time"></small></div>
+
+    <div id="r-review">
+      <p class="rv-lead">자동 인식 결과입니다. 실제 도면과 맞는지 확인한 <b>뒤에만</b> 공유 링크가 열립니다. 틀리면 삭제하고 다시 올리세요.</p>
+      <div id="r-prevs" class="rv-prevs"></div>
+      <p class="rv-legend"><i class="lg-wall"></i>벽 <i class="lg-door"></i>문 · 진입구와 창은 3D로 열어 확인할 수 있습니다</p>
+      <ul id="r-warn" class="warn"></ul>
+      <ul id="r-floors" class="floors-sum"></ul>
+      <a class="btn" id="r-peek" target="_blank" rel="noopener">3D로 열어 보기 (진입구·창 확인)</a>
+      <div class="rv-checks">
+        <label class="chk"><input type="checkbox" data-chk="walls"><span>벽(검은 선)이 실제 도면과 맞습니다</span></label>
+        <label class="chk"><input type="checkbox" data-chk="entrance"><span>진입구(외부 출입문) 위치가 맞습니다</span></label>
+        <label class="chk"><input type="checkbox" data-chk="doors"><span>문(초록 선)을 빠뜨린 곳이 없습니다</span></label>
+      </div>
+      <input id="r-note" class="rv-note" maxlength="200" placeholder="메모(선택) 예) 2층 계단실 미표시" autocomplete="off">
+      <div class="row2">
+        <button class="btn primary" id="r-confirm" disabled>확인 완료 · 공유 열기</button>
+        <button class="btn danger" id="r-reject">틀림 · 삭제하고 다시</button>
+      </div>
+      <p id="r-rverr" class="err" hidden></p>
     </div>
-    <div class="qr"><img id="r-qr" alt="QR 코드"><p><b>휴대폰 카메라로 스캔</b>현장 대원 단말에서 바로 열립니다</p></div>
-    <ul id="r-floors" class="floors-sum"></ul>
-    <ul id="r-warn" class="warn"></ul>
+
+    <div id="r-sharebox" hidden>
+      <p class="rv-stamp" id="r-stamp"></p>
+      <div class="linkbox"><input id="r-url" readonly aria-label="공유 링크"><button class="btn" id="r-copy">복사</button></div>
+      <div class="row3">
+        <button class="btn primary" id="r-share"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>공유하기</button>
+        <a class="btn" id="r-open" target="_blank" rel="noopener">열기</a>
+        <button class="btn" id="r-new">새 도면</button>
+      </div>
+      <div class="qr"><img id="r-qr" alt="QR 코드"><p><b>휴대폰 카메라로 스캔</b>현장 대원 단말에서 바로 열립니다</p></div>
+    </div>
   </section>
 
   <section class="card recent" id="recent" hidden>
-    <h2>이 기기에서 만든 링크</h2>
+    <h2>이 기기에서 만든 링크<button class="mini-txt" id="rc-all">모두 삭제</button></h2>
     <ul></ul>
   </section>
 
-  <footer>링크를 아는 사람만 열람할 수 있습니다 · 서버 보관 30일<br>자동 인식 결과이므로 실제 구조와 다를 수 있습니다</footer>
+  <section class="card" id="manage">
+    <details>
+      <summary>서버 보관 모델 관리 <em>상황실용 · 업로드 접근 코드로 다른 기기에서도 삭제</em></summary>
+      <div class="srv-actions"><button class="btn" id="srv-load">목록 불러오기</button><button class="btn danger" id="srv-all" hidden>전부 삭제</button></div>
+      <ul id="srv-list" class="srv-list"></ul>
+      <p id="srv-err" class="err" hidden></p>
+    </details>
+  </section>
+
+  <footer>링크를 아는 사람만 열람할 수 있습니다 · 서버 보관은 업로드 때 고른 기간(1·7·30일)<br>자동 인식 결과이므로 실제 구조와 다를 수 있습니다</footer>
 </main>
 <script type="module" src="{{BASE}}/static/upload.js"></script>
 </body>

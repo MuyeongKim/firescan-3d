@@ -210,3 +210,62 @@ body:not(.multi) #minimap { top: calc(var(--safe-t) + 70px); }
   body.walk .legend { display: none; }
   .hint { bottom: calc(var(--safe-b) + 142px); }
 }
+
+/* ---- 인식 결과 확인 단계 ---- */
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(255, 176, 32, .18); }
+.rv-lead { margin: 0 0 12px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.rv-lead b { color: var(--text); }
+.rv-prevs { display: grid; gap: 10px; }
+.rv-prevs figure { margin: 0; }
+.rv-prevs img { width: 100%; border-radius: 10px; display: block; background: #fff; max-height: 320px; object-fit: contain; }
+.rv-prevs figcaption { margin-top: 4px; font-size: 13px; color: var(--muted); }
+.rv-prevs figcaption b { color: var(--text); margin-right: 4px; }
+.rv-legend { margin: 8px 0 0; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rv-legend i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-left: 6px; }
+.rv-legend i.lg-wall { background: #3a3128; margin-left: 0; }
+.rv-legend i.lg-door { background: #22c55e; }
+.warn { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+.warn li { background: rgba(255, 176, 32, .12); border: 1px solid rgba(255, 176, 32, .45); color: #ffd58a; border-radius: 8px; padding: 8px 10px; font-size: 14px; line-height: 1.5; }
+#r-peek { width: 100%; margin-top: 12px; text-align: center; }
+.rv-checks { display: grid; gap: 8px; margin: 14px 0 10px; }
+.chk { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg3); font-size: 16px; cursor: pointer; }
+.chk input { width: 26px; height: 26px; flex: none; accent-color: var(--accent); }
+.rv-note { width: 100%; height: 48px; border-radius: 10px; border: 1px solid var(--line2); background: var(--bg); color: var(--text); padding: 0 12px; font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
+.row2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.rv-stamp { margin: 0 0 4px; font-size: 14px; color: var(--ok); }
+
+.review-badge { position: fixed; top: calc(var(--safe-t) + 112px); left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px); z-index: 5; padding: 6px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; pointer-events: none; }
+.review-badge.ok { background: rgba(34, 197, 94, .16); border: 1px solid rgba(34, 197, 94, .5); color: #9be8b8; }
+.review-badge.warn { background: rgba(255, 176, 32, .18); border: 1px solid rgba(255, 176, 32, .6); color: #ffd58a; }
+.review-badge[hidden] { display: none; }
+
+/* ---- 방 이름·소방시설 표시 ---- */
+.alab { position: fixed; z-index: 4; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 5px; max-width: 46vw; padding: 3px 8px 3px 6px; border-radius: 999px;
+  background: rgba(13, 16, 20, .82); border: 1px solid var(--kc, #e8edf2); color: #f3f6f9; font-size: 13px; font-weight: 700; line-height: 1.25; white-space: nowrap; pointer-events: none; }
+.alab i { width: 9px; height: 9px; border-radius: 50%; background: var(--kc, #e8edf2); flex: none; }
+.alab span { overflow: hidden; text-overflow: ellipsis; }
+body.annot-on .alab { pointer-events: auto; cursor: pointer; padding: 6px 10px 6px 8px; }
+.annot-bar { position: fixed; z-index: 6; left: 10px; right: 10px; bottom: calc(var(--safe-b) + 150px); background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; padding: 10px; backdrop-filter: blur(6px); }
+.ab-kinds { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 8px; }
+.ab-kinds button { flex: none; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--bg3); color: var(--text); font-size: 15px; border-left: 5px solid var(--kc); }
+.ab-kinds button.on { background: var(--bg); outline: 2px solid var(--kc); }
+.ab-row { display: flex; gap: 8px; }
+.ab-row input { flex: 1; min-width: 0; height: 48px; border-radius: 10px; border: 1px solid var(--line2); background: var(--bg); color: var(--text); padding: 0 12px; font-size: 16px; }
+.ab-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.ab-msg.bad { color: var(--danger); }
+
+/* ---- 보관 기간·서버 모델 관리 ---- */
+select#ttl { width: 100%; height: 48px; border-radius: 10px; border: 1px solid var(--line2); background: var(--bg); color: var(--text); padding: 0 12px; font-size: 16px; }
+.mini-txt { margin-left: auto; background: none; border: 1px solid var(--line2); color: var(--muted); border-radius: 8px; min-height: 36px; padding: 0 10px; font-size: 13px; }
+.recent h2 { display: flex; align-items: center; }
+#manage summary { cursor: pointer; font-size: 16px; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#manage summary em { color: var(--muted); font-style: normal; font-weight: 400; font-size: 13px; }
+.srv-actions { display: flex; gap: 8px; margin: 10px 0; }
+.srv-actions .btn { flex: 1; }
+.srv-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.srv-list li { display: flex; align-items: center; gap: 10px; background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.srv-list li > div { flex: 1; }
+.srv-list b { display: block; font-size: 15px; }
+.srv-list small { color: var(--muted); font-size: 12.5px; }
+.srv-list li.empty { color: var(--muted); justify-content: center; }
