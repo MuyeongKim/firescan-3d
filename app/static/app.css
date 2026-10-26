@@ -206,8 +206,10 @@ body:not(.multi) #minimap { top: calc(var(--safe-t) + 70px); }
 
 /* 세로 휴대폰: 도구를 하단 가로줄로 내려 화면 가림 최소화 */
 @media (max-width: 600px) {
-  .tools { top: auto; bottom: calc(var(--safe-b) + 78px); right: 50%; transform: translateX(50%); flex-direction: row; }
-  .tools button { width: 60px; height: 52px; border-radius: 13px; }
+  /* 업로더는 버튼이 6개(저장·표시 포함)라 60px 고정이면 375px 화면에서 양끝이 잘린다 → 화면 폭을 넘으면 같이 줄어든다 */
+  .tools { top: auto; bottom: calc(var(--safe-b) + 78px); right: 50%; transform: translateX(50%); flex-direction: row;
+    width: max-content; max-width: calc(100vw - 16px - var(--safe-l) - var(--safe-r)); }
+  .tools button { width: 60px; flex: 0 1 60px; min-width: 0; height: 52px; border-radius: 13px; }
   .legend { position: static; max-width: none; }
   body.walk .legend { display: none; }
   .hint { bottom: calc(var(--safe-b) + 142px); }
