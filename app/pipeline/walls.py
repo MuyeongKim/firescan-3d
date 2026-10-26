@@ -119,6 +119,34 @@ def tone_fill_walls(bgr: np.ndarray, dark: np.ndarray) -> np.ndarray | None:
     return cv2.morphologyEx(cv2.morphologyEx(ink, cv2.MORPH_CLOSE, _rect(L, 1)), cv2.MORPH_CLOSE, _rect(1, L))
 
 
+def hatch_fill_walls(bgr: np.ndarray) -> np.ndarray | None:
+    """CAD 의 빗금(해치) 벽처럼 가는 선이 촘촘히 몰려 두꺼운 띠가 된 벽을 잉크 마스크로 돌려준다. 아니면 None.
+    이런 벽은 가는 선·중간 회색 빗금이 섞여 binarize 의 잉크가 부서지고 획 폭 분포는 1~3px 선이 지배해, filled·double 어느 쪽도
+    고르지 못하고 단선으로 빠진다. 가구선·치수선은 밀도가 낮아 걸러진다. 흰 배경이 지배적일 것, 띠의 면적·두께 범위, 연결된
+    벽망일 것을 요구하고, 호출하는 쪽은 기존 방식이 단선으로 빠졌을 때만 쓰며 그래도 단선이면 되돌린다."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    H, W = gray.shape
+    long = max(H, W)
+    if (gray >= 251).mean() < 0.55:                      # 깨끗한 디지털 도면(흰 배경)만
+        return None
+    w = max(5, int(round(0.0055 * long)) | 1)
+    dens = cv2.boxFilter((gray <= 200).astype(np.float32), -1, (w, w))
+    k = max(3, int(round(0.004 * long)))
+    mask = cv2.morphologyEx(((dens >= 0.45) * 255).astype(np.uint8), cv2.MORPH_OPEN, _rect(k, k))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _rect(k, k))
+    share = (mask > 0).mean()
+    if not (0.015 <= share <= 0.2):
+        return None
+    dt = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+    thick = 2.0 * float(np.median(dt[mask > 0]))
+    if not (3 <= thick <= 0.04 * long):                  # 벽 두께 범위. 칠해진 큰 덩어리·글자 뭉치는 걸러진다
+        return None
+    n, _, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if n < 2 or st[1:, 4].max() < 0.1 * (mask > 0).sum():  # 벽은 서로 이어진 망 — 흩어진 조각이면 벽이 아니다
+        return None
+    return mask
+
+
 def remove_clutter(ink: np.ndarray) -> np.ndarray:
     """글자·기호 같은 작은 성분과 사진 테두리의 큰 어두운 덩어리 제거."""
     H, W = ink.shape
@@ -415,9 +443,12 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
     notes: list[str] = []
     ink_orig = binarize(bgr)
     gap_src = ink_orig          # 개구부 안의 선(창 선·문짝)을 찾는 근거
+    auto_ink = ink is None      # 래스터 이미지(밖에서 잉크를 주지 않은 경우)만 벽 종류별 대체 경로를 시도한다
+    tone = False
     if ink is None:
         ink = tone_fill_walls(bgr, ink_orig)
         if ink is not None:
+            tone = True
             notes.append("연한 회색으로 칠한 벽 인식")
             # 이런 도면은 창·문짝을 청록 같은 색 선으로 그리는 일이 많다. binarize 는 색 있는 선을 빼므로, 벽 색보다 어두운 선은 모두 근거로 쓴다
             gap_src = (cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) < 215).astype(np.uint8) * 255
@@ -425,18 +456,34 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
             ink = ink_orig
     clean = remove_clutter(ink)
 
-    mode, base, ko = "filled", clean, None
-    cav = fill_cavities(clean, long)
-    if cav:
-        filled, p = cav
-        ko = choose_open_kernel(filled, long)
-        if ko:
-            mode, base = "double", filled
-            notes.append(f"2중선/해치 벽 (공동 {p}px)")
-    if mode == "filled":
-        ko = choose_open_kernel(clean, long)
-        if not ko:
-            mode = "single"
+    def decide(c: np.ndarray):
+        """잉크 마스크로 도면 유형(filled·double·single)과 벽 마스크의 근거를 고른다."""
+        mode, base, ko, nts = "filled", c, None, []
+        cav = fill_cavities(c, long)
+        if cav:
+            filled, p = cav
+            ko = choose_open_kernel(filled, long)
+            if ko:
+                mode, base = "double", filled
+                nts.append(f"2중선/해치 벽 (공동 {p}px)")
+        if mode == "filled":
+            ko = choose_open_kernel(c, long)
+            if not ko:
+                mode = "single"
+        return mode, base, ko, nts
+
+    mode, base, ko, nts = decide(clean)
+    notes += nts
+    if mode == "single" and auto_ink and not tone:
+        # 단선으로 빠졌어도 빗금 벽 도면일 수 있다 → 촘촘한 선 띠를 벽으로 읽어 다시 판별하고, 그래도 단선이면 처음 판정을 쓴다
+        hatch = hatch_fill_walls(bgr)
+        if hatch is not None:
+            c2 = remove_clutter(hatch)
+            m2, b2, k2, n2 = decide(c2)
+            if m2 != "single":
+                ink, clean, mode, base, ko = hatch, c2, m2, b2, k2
+                notes += [*n2, "빗금(해치) 벽 인식"]
+                gap_src = (cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) < 215).astype(np.uint8) * 255
 
     if mode == "single":
         walls, t = single_line_walls(clean, long)
@@ -464,7 +511,7 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
         m_per_px, scale_source = width_m / max(xs.max() - xs.min(), 1), "user"
     elif m_per_px:
         scale_source = "dxf"
-    elif ds and (single or WALL_T_RANGE_M[0] <= t * ds[0] <= WALL_T_RANGE_M[1]):
+    elif ds and (3.0 <= span_px * ds[0] <= 80.0 if single else WALL_T_RANGE_M[0] <= t * ds[0] <= WALL_T_RANGE_M[1]):
         m_per_px, scale_source = ds[0], "door"
         notes.append(f"문 {ds[1]}개 폭으로 축척 추정")
     elif not single:

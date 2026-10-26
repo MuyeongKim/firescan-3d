@@ -85,6 +85,19 @@ def make_variants(out: Path) -> dict[str, tuple[Path, str]]:
         cv2.line(tone, (1200, y), (1560, y), (150, 150, 150), 1)
     cv2.line(tone, (60, 40), (base.shape[1] - 60, 40), (30, 30, 30), 1)  # 건물 바깥 치수선
     save("20_회색벽_테두리없음.png", tone, "ok_loose")
+    # CAD 빗금(해치) 벽: 벽 안을 잉크 기준(150) 언저리의 중간 회색 사선으로 촘촘히 채우고 1px 테두리를 두른다. 가구·치수 같은 1px 선이 많아
+    # 획 폭 분포를 지배하므로 filled·double 어느 쪽도 못 고르고 단선으로 빠져, 문 폭으로 구한 축척이 터무니없이 커졌던(77m) 경우
+    yy, xx = np.mgrid[:g.shape[0], :g.shape[1]]
+    rng = np.random.default_rng(5)
+    hat = np.full_like(base, 255)
+    hat[(g < 100) & (wm == 0)] = (20, 20, 20)
+    fill = (wm > 0) & (((xx + yy) % 3) != 0)
+    hat[fill] = rng.integers(125, 165, size=(int(fill.sum()), 1)).astype(np.uint8)
+    hat[(wm > 0) & (cv2.erode(wm, np.ones((3, 3), np.uint8)) == 0)] = (15, 15, 15)
+    for _ in range(60):
+        x0, y0 = int(rng.integers(100, g.shape[1] - 300)), int(rng.integers(100, g.shape[0] - 200))
+        cv2.rectangle(hat, (x0, y0), (x0 + int(rng.integers(40, 160)), y0 + int(rng.integers(20, 90))), (30, 30, 30), 1)
+    save("21_빗금벽_CAD.png", hat, "ok_loose")
     col = base.copy(); col[g > 200] = (200, 230, 250)
     save("13_컬러방_도면.png", col, "ok")
     p2 = cv2.imread(str(S / "apt_2f.png"))
