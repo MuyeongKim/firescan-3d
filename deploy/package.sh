@@ -12,7 +12,7 @@ mkdir -p "$STAGE/deploy" dist
 
 cp -R app "$STAGE/"
 cp requirements.txt Dockerfile .dockerignore docker-compose.yml SERVER.md "$STAGE/"
-cp deploy/docker-up.sh deploy/install.sh deploy/nginx.conf.example "$STAGE/deploy/"
+cp deploy/docker-up.sh deploy/install.sh deploy/ensure-env.sh deploy/nginx.conf.example "$STAGE/deploy/"
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} +
 find "$STAGE" \( -name .DS_Store -o -name '*.pyc' \) -delete
 chmod +x "$STAGE"/deploy/*.sh

@@ -30,7 +30,7 @@ echo "· Python: $("$PY" --version)"
 as_user .venv/bin/pip install -q --upgrade pip
 as_user .venv/bin/pip install -q -r requirements.txt
 as_user mkdir -p data
-[ -f .env ] || { as_user cp .env.example .env; echo "· .env 생성(.env.example 복사)"; }
+as_user ./deploy/ensure-env.sh
 set -a; . ./.env; set +a
 
 cat > "/etc/systemd/system/$SVC.service" <<EOF

@@ -8,7 +8,7 @@ if docker compose version >/dev/null 2>&1; then DC="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then DC="docker-compose"
 else echo "Docker(Compose 포함)가 없습니다. Docker 를 설치하거나 sudo ./deploy/install.sh 를 쓰세요."; exit 1; fi
 
-[ -f .env ] || { cp .env.example .env; echo "· .env 생성(.env.example 복사)"; }
+./deploy/ensure-env.sh
 mkdir -p data
 set -a; . ./.env; set +a
 
