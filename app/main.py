@@ -353,29 +353,34 @@ async def create_model(
     for i, f in enumerate(files):
         data = await f.read()
         if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+            audit("upload_fail", request, reason="too_big", files=len(files), kb=len(data) // 1024)
             raise HTTPException(413, f"{f.filename}: 파일이 너무 큽니다(최대 {MAX_UPLOAD_MB:.0f}MB)")
         raw.append((f.filename or f"file{i}", data, (labels[i] if i < len(labels) else "").strip()))
+
+    total_kb = sum(len(r[1]) for r in raw) // 1024
 
     def split(item):
         fn, data, lab = item
         return fn, load_pages(data, fn, lab)
 
     warnings: list[str] = []
+    reasons: list[str] = []
     pages = []
     for fn, res in zip([r[0] for r in raw], await asyncio.gather(
             *[asyncio.wrap_future(POOL.submit(split, r)) for r in raw], return_exceptions=True)):
         if isinstance(res, Exception):
             warnings.append(f"{fn}: {res if isinstance(res, UnsupportedFile) else '읽기 실패'}")
+            reasons.append(fail_reason(res) if isinstance(res, UnsupportedFile) else "unreadable")
             continue
         pages.extend(res[1])
     if len(pages) > MAX_PAGES:
         warnings.append(f"층(페이지)이 많아 앞의 {MAX_PAGES}개만 생성했습니다")
         pages = pages[:MAX_PAGES]
-    n = 0
-    for p in pages:                      # 이름 없는 층은 순서대로 1F, 2F …
-        n += 1
+    auto = set()
+    for n, p in enumerate(pages, 1):     # 이름 없는 층은 순서대로 1F, 2F … (건너뛴 페이지가 있으면 아래에서 다시 번호를 매긴다)
         if not p.label:
             p.label = f"{n}F"
+            auto.add(n - 1)
 
     results = await asyncio.gather(
         *[asyncio.wrap_future(POOL.submit(build_floor, p, wall_height, width_m)) for p in pages],
@@ -384,19 +389,47 @@ async def create_model(
     mid = secrets.token_urlsafe(8)
     d = DATA / mid
     d.mkdir(parents=True)
-    floors = []
+    # 한 장에서 나뉜 조각 중 닫힌 방이 2개 이상인 것만 평면도로 남긴다(범례·표 같은 조각은 조용히 제외, 하나도 없으면 방이 가장 많은 것 하나)
+    skip: set[int] = set()
+    groups: dict[str, list[int]] = {}
+    for i, p in enumerate(pages):
+        if p.group:
+            groups.setdefault(p.group, []).append(i)
+    for idxs in groups.values():
+        good = [i for i in idxs if not isinstance(results[i], Exception) and results[i].info.get("rooms", 0) >= 2]
+        if not good:
+            built = [i for i in idxs if not isinstance(results[i], Exception)]
+            good = [max(built, key=lambda i: results[i].info.get("rooms", 0))] if built else []
+        skip.update(set(idxs) - set(good))
+    floors, kept = [], []
     for i, (p, r) in enumerate(zip(pages, results)):
+        if i in skip:
+            continue
         if isinstance(r, Exception):
             warnings.append(f"{p.label}: 벽을 인식하지 못했습니다" if isinstance(r, ValueError) else
                             f"{p.label}: 처리 오류")
+            reasons.append(fail_reason(r))
             continue
+        if why := not_a_plan(r.info):
+            warnings.append(f"{p.label}: 평면도가 아닌 것 같아 건너뜁니다 ({why})")
+            reasons.append("not_plan")
+            continue
+        warnings.extend(soft_warnings(r.info))
         (d / f"f{i}.glb").write_bytes(r.glb)
         (d / f"f{i}.jpg").write_bytes(r.preview)
         floors.append({**r.info, "glb": f"f{i}.glb", "preview": f"f{i}.jpg",
                        "glb_kb": round(len(r.glb) / 1024)})
+        kept.append(i)
+    k = 0
+    for i, fl in zip(kept, floors):      # 표지 등을 건너뛰었다면 이름 없는 층은 남은 도면 기준으로 1F 부터 다시 매긴다
+        if i in auto:
+            k += 1
+            fl["label"] = f"{k}F"
     if not floors:
         shutil.rmtree(d, ignore_errors=True)
-        raise HTTPException(422, "도면에서 벽을 찾지 못했습니다. " + " / ".join(warnings))
+        audit("upload_fail", request, reason=",".join(sorted(set(reasons)))[:60] or "no_walls", files=len(files),
+              ext=",".join(sorted({Path(f.filename or "").suffix.lower()[:6] for f in files}))[:40], kb=total_kb)
+        raise HTTPException(422, "도면에서 벽을 찾지 못했습니다. " + " / ".join(warnings) + "\n" + FAIL_HELP)
 
     created = datetime.now(timezone.utc)
     meta = {
@@ -465,6 +498,41 @@ def check_upload_code(request: Request, given: str) -> None:
         BAD_CODE.hit(ip)
         audit("code_fail", request, path=request.url.path)   # 입력한 값은 남기지 않는다
         raise HTTPException(401, "업로드 접근 코드가 올바르지 않습니다")
+
+
+FAIL_HELP = ("이렇게 해 보세요: ① 흰 종이에 검은 선으로 그린 평면도가 가장 잘 인식됩니다. "
+             "② 사진은 도면 전체가 정면에서 밝고 또렷하게 나오게 찍어 주세요. "
+             "③ 도면 테두리·표제란·여러 도면이 한 장에 있으면 평면도 하나만 잘라서 올려 주세요. "
+             "④ CAD 원본이 있으면 PDF 또는 DXF 로 저장해 올려 주세요(DWG 는 직접 읽지 못합니다).")
+
+
+def fail_reason(exc: BaseException) -> str:
+    """실패 사유를 파일명·내용 없이 분류 코드로만 남긴다(감사 기록용)."""
+    msg = str(exc)
+    if isinstance(exc, UnsupportedFile):
+        for key, code in (("DWG", "dwg"), ("HEIC", "heic"), ("읽을 수 없", "unreadable"), ("DXF", "dxf_bad")):
+            if key in msg:
+                return code
+        return "unsupported"
+    return "no_walls" if isinstance(exc, ValueError) else "error"
+
+
+def not_a_plan(info: dict) -> str | None:
+    """평면도가 아닌 이미지(글자만 있는 이미지·표지 페이지 등)로 보이면 이유를, 아니면 None. 닫힌 방이 하나도 없고 크기가 비정상일 때만 거른다."""
+    w, d = info["width_m"], info["depth_m"]
+    lo, hi = min(w, d), max(w, d)
+    if info.get("rooms", 1) == 0 and (lo < 3.0 or hi / max(lo, 0.1) > 6):
+        return f"크기 {w}×{d}m, 닫힌 방 없음"
+    return None
+
+
+def soft_warnings(info: dict) -> list[str]:
+    out = []
+    if info.get("rooms", 1) == 0:
+        out.append(f"{info['label']}: 벽으로 닫힌 방을 찾지 못했습니다. 벽이 끊겼거나 평면도가 아닐 수 있으니 결과를 꼭 확인하세요")
+    if max(info["width_m"], info["depth_m"]) > 150:
+        out.append(f"{info['label']}: 건물이 {max(info['width_m'], info['depth_m']):.0f}m 로 매우 큽니다. 축척이 틀렸을 수 있으니 건물 가로 길이를 입력해 보세요")
+    return out
 
 
 ANNOT_KINDS = {"room", "stairs", "exit", "hydrant", "extinguisher", "firedoor", "hazard"}

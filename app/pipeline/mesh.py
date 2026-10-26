@@ -168,7 +168,7 @@ def build_glb(r: WallResult, texture_jpeg: bytes, image_shape, wall_h: float, la
     info = {
         "label": label, "width_m": round(float(bx[0]), 2), "depth_m": round(float(bx[1]), 2),
         "wall_height": wall_h, "m_per_px": round(s, 6), "scale_source": r.scale_source, "mode": r.mode,
-        "doors": len(door_polys), "windows": len(win_polys), "wall_parts": len(wall_polys),
+        "doors": len(door_polys), "windows": len(win_polys), "wall_parts": len(wall_polys), "rooms": r.rooms,
         "plan_rect": [round(float(v), 3) for v in (*corners[0], *corners[2])], "notes": r.notes,
         # 진입구: [x, z, 안쪽 방향 dx, dz] (m)
         "entrances": [[round(float((x - cx) * s), 3), round(float((y - cy) * s), 3), nx, ny] for x, y, nx, ny in r.entrances],

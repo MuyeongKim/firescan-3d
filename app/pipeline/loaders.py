@@ -4,12 +4,15 @@ from __future__ import annotations
 import io
 import math
 import re
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+from .prep import crop_to_content, normalize_many
 
 MAX_SIDE = 2000      # 처리 해상도 상한(긴 변 px). 속도와 정밀도의 절충점
 MIN_SIDE = 1000      # 너무 작은 이미지는 모폴로지 여유를 위해 확대
@@ -33,6 +36,10 @@ class Page:
     label: str
     m_per_px: float | None = None     # 축척을 알면(DXF) 지정
     ink: np.ndarray | None = None     # DXF: 벽 레이어만 그린 마스크(이진화 생략)
+    notes: list[str] = field(default_factory=list)   # 전처리 설명(어두운 배경 반전·테두리 제거·원근 보정)
+    alt: np.ndarray | None = None     # 기울기·원근 보정을 적용했다면 보정 전 이미지(보정이 오히려 나쁘면 이쪽을 쓴다)
+    rect_note: str | None = None
+    group: str | None = None          # 한 장에서 나뉜 도면들의 묶음 표시
 
 
 def _fit(img: np.ndarray) -> np.ndarray:
@@ -52,13 +59,31 @@ def _load_image(data: bytes) -> np.ndarray:
         im = Image.open(io.BytesIO(data))
         im = ImageOps.exif_transpose(im)   # 휴대폰 사진 회전 보정
     except Exception as e:  # noqa: BLE001
-        raise UnsupportedFile("이미지를 읽을 수 없습니다") from e
+        if data[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1", b"ftyphevc") or data[4:8] == b"ftyp":
+            raise UnsupportedFile("HEIC 사진은 지원하지 않습니다. 아이폰은 설정 > 카메라 > 포맷에서 '호환성 우선'으로 찍거나 JPG로 바꿔 올려 주세요") from e
+        raise UnsupportedFile("이미지를 읽을 수 없습니다. JPG·PNG·PDF·DXF 파일인지 확인하세요") from e
     if im.mode in ("RGBA", "LA", "P"):
         im = im.convert("RGBA")
         bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
         im = Image.alpha_composite(bg, im)
     im = im.convert("RGB")
-    return _fit(np.asarray(im)[:, :, ::-1].copy())
+    img = np.asarray(im)[:, :, ::-1].copy()
+    try:
+        img, _ = crop_to_content(img)       # 축소하기 전에 잘라야 작게 찍힌 도면이 뭉개지지 않는다
+    except Exception:  # noqa: BLE001
+        pass
+    return _fit(img)
+
+
+def _pages_from(img: np.ndarray, label: str, base: str) -> list[Page]:
+    """이미지 한 장 → 페이지(층) 목록. 한 장에 도면이 여러 개면 나눠서 같은 group 으로 묶는다(범례 같은 조각은 이후 방 수로 걸러낸다)."""
+    parts = normalize_many(img)
+    group = uuid.uuid4().hex[:8] if len(parts) > 1 else None
+    pages = []
+    for k, (im, notes, alt, rn) in enumerate(parts, 1):
+        lab = label if len(parts) == 1 else (f"{base}-{k}" if base else "")
+        pages.append(Page(im, lab, notes=notes, alt=alt, rect_note=rn, group=group))
+    return pages
 
 
 def _load_pdf(data: bytes, label: str) -> list[Page]:
@@ -72,7 +97,7 @@ def _load_pdf(data: bytes, label: str) -> list[Page]:
         z = MAX_SIDE / max(page.rect.width, page.rect.height)
         pix = page.get_pixmap(matrix=pymupdf.Matrix(z, z), alpha=False)
         arr = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)[:, :, :3][:, :, ::-1]
-        pages.append(Page(_fit(arr.copy()), label if doc.page_count == 1 else f"{label}-{i + 1}"))
+        pages.extend(_pages_from(_fit(arr.copy()), label if doc.page_count == 1 else (f"{label}-{i + 1}" if label else ""), label))
     return pages
 
 
@@ -182,4 +207,4 @@ def load_pages(data: bytes, filename: str, label: str) -> list[Page]:
         return _load_dxf(data, label)
     if ext == ".dwg" or head.startswith(b"AC10"):
         raise UnsupportedFile("DWG는 직접 지원하지 않습니다. CAD에서 DXF 또는 PDF로 저장해 올려주세요")
-    return [Page(_load_image(data), label)]
+    return _pages_from(_load_image(data), label, label)

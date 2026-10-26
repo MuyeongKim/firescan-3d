@@ -33,6 +33,7 @@ class WallResult:
     scale_source: str                  # user | dxf | wall | door | assumed
     notes: list[str] = field(default_factory=list)
     entrances: list[tuple[float, float, float, float]] = field(default_factory=list)  # (x, y, 안쪽 방향 nx, ny) px
+    rooms: int = 0                     # 벽·문·창으로 닫힌 방(1.5m 이상) 개수. 0 이면 평면도가 아닐 가능성
 
 
 # ------------------------------------------------------------------ helpers
@@ -65,7 +66,15 @@ def binarize(bgr: np.ndarray) -> np.ndarray:
         gray = np.clip(gray.astype(np.float32) / np.maximum(bgf, 1) * 245, 0, 255).astype(np.uint8)
     thr, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     thr = min(thr, 150)
-    dark = gray < thr
+    dark = gray <= thr
+    lo, hi = np.percentile(gray, (0.5, 99.5))
+    if dark.mean() < 0.004 and 20 < hi - lo < 140:
+        # 연하고 대비가 낮은 스캔: 선이 임계값 상한(150)보다 밝아 하나도 잡히지 않을 때만 대비를 늘려 다시 이진화한다
+        # (이미 잡히는 이미지는 건드리지 않는다 — 어두운 사진에서 오히려 나빠진 적이 있다)
+        gray = np.clip((gray.astype(np.float32) - lo) / (hi - lo) * 255, 0, 255).astype(np.uint8)
+        thr, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        thr = min(thr, 150)
+        dark = gray <= thr   # cv2 의 이진화는 '> thr' 이 밝음이므로 어두움은 '<= thr'(색이 두 가지뿐인 1비트 이미지에서 임계값이 0 이어도 벽을 잡는다)
     vivid = (hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 70)   # 빨간 피난화살표, 초록 비상구 등 컬러 표식 제외
     ink = (dark & ~vivid).astype(np.uint8) * 255
     return cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8)) if spread > 25 else ink
@@ -329,6 +338,22 @@ def find_entrances(doors: list[Gap], footprint: np.ndarray, m_per_px: float):
     return [e for *_, e in sorted(out)]     # 문짝 확인된 것, 넓은 것 우선
 
 
+def count_rooms(closed: np.ndarray, m_per_px: float) -> int:
+    """벽(+문·창 개구부를 닫은 것)으로 둘러싸인 빈 공간 중 한 변 1.5m 이상인 것의 개수."""
+    free = (closed == 0).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(free, connectivity=4)
+    h, w = closed.shape
+    min_px = 1.5 / max(m_per_px, 1e-6)
+    rooms = 0
+    for i in range(1, n):
+        x, y, bw, bh, area = st[i]
+        if x == 0 or y == 0 or x + bw >= w or y + bh >= h:
+            continue                      # 이미지 가장자리와 이어진 바깥 공간
+        if min(bw, bh) >= min_px and area >= 0.5 * bw * bh * 0.3:
+            rooms += 1
+    return rooms
+
+
 def footprint_of(walls: np.ndarray, m_per_px: float, t: float) -> np.ndarray:
     """건물 바닥: 벽선 위의 끊김(문·창·넓은 개구부 ≤5m)을 이어 붙인 뒤 외곽 윤곽을 채움."""
     wb = walls > 0
@@ -415,7 +440,8 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
             t = tgt
     fp = footprint_of(walls | door_m | win_m, m_per_px, t)
     ent = find_entrances(doors, fp, m_per_px)
-    return WallResult(walls, door_m, win_m, fp, mode, float(t), float(m_per_px), scale_source, notes, ent)
+    rooms = count_rooms(walls | door_m | win_m, m_per_px)
+    return WallResult(walls, door_m, win_m, fp, mode, float(t), float(m_per_px), scale_source, notes, ent, rooms)
 
 
 def debug_overlay(bgr: np.ndarray, r: WallResult) -> np.ndarray:

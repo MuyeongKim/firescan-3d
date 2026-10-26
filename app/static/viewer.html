@@ -28,6 +28,7 @@
 <link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/utils/BufferGeometryUtils.js">
 <link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/utils/SkeletonUtils.js">
 <link rel="modulepreload" href="{{BASE}}/static/viewer.js">
+<link rel="modulepreload" href="{{BASE}}/static/viewer3d.js">
 <link rel="preload" href="{{BASE}}/api/models/{{MODEL_ID}}" as="fetch" crossorigin="anonymous">
 <link rel="preload" href="{{FIRST_GLB}}" as="fetch" crossorigin="anonymous">
 </head>
@@ -79,6 +80,16 @@
 </div>
 <div id="hint" class="hint"></div>
 <div id="labels"></div>
+
+<section id="fallback" class="fallback" hidden>
+  <h2>이 기기에서는 3D 화면을 표시할 수 없습니다</h2>
+  <p id="fb-why">브라우저가 WebGL 을 지원하지 않거나 꺼져 있습니다. 아래 평면 미리보기로 확인하세요. 다른 브라우저나 기기에서 같은 링크를 열면 3D 로 볼 수 있습니다.</p>
+  <h1 id="fb-title"></h1>
+  <nav id="fb-floors" class="fb-floors"></nav>
+  <figure class="fb-fig"><img id="fb-img" alt="평면 미리보기"><figcaption id="fb-cap"></figcaption></figure>
+  <p class="fb-legend"><i class="lg-wall"></i>검은 선 = 벽 · <i class="lg-door"></i>초록 선 = 문. 자동 인식 결과이므로 실제 구조와 다를 수 있습니다.</p>
+  <div id="fb-annots"></div>
+</section>
 
 <div id="loading" class="loading">
   <div class="spinner"></div>

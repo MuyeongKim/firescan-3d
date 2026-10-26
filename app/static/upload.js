@@ -407,7 +407,11 @@ $('#srv-all').addEventListener('click', async () => {
 // 업로드·삭제·접근 실패 기록(상황실이 누가 언제 했는지 확인). 접근 코드 값·건물명·메모는 서버가 기록하지 않는다.
 const EVENT = {
   upload: '업로드', delete: '삭제', confirm: '인식 확인', annotations: '표시 편집', list: '목록 조회', expire: '자동 만료',
-  code_fail: '⚠ 코드 오입력', code_locked: '⚠ 코드 입력 제한', delete_denied: '⚠ 삭제 거부',
+  code_fail: '⚠ 코드 오입력', code_locked: '⚠ 코드 입력 제한', delete_denied: '⚠ 삭제 거부', upload_fail: '⚠ 업로드 실패',
+};
+const REASON = {
+  no_walls: '벽을 인식하지 못함', not_plan: '평면도가 아닌 것 같음', dwg: 'DWG(미지원)', heic: 'HEIC 사진(미지원)', unreadable: '파일을 읽을 수 없음',
+  dxf_bad: 'DXF 오류', too_big: '용량 초과', unsupported: '미지원 형식', error: '처리 오류',
 };
 $('#audit-load').addEventListener('click', async () => {
   srvErr('');
@@ -433,6 +437,9 @@ $('#audit-load').addEventListener('click', async () => {
     if (ev.ttl != null) bits.push(`${ev.ttl}일 보관`);
     if (ev.by) bits.push(ev.by === 'code' ? '코드로 삭제' : '토큰으로 삭제');
     if (ev.count != null) bits.push(`표시 ${ev.count}개`);
+    if (ev.reason) bits.push('사유: ' + ev.reason.split(',').map((x) => REASON[x] || x).join(', '));
+    if (ev.ext) bits.push(`형식 ${ev.ext}`);
+    if (ev.ev === 'upload_fail' && ev.kb != null) bits.push(`${ev.kb}KB`);
     li.querySelector('small').textContent = bits.join(' · ');
     ul.appendChild(li);
   }

@@ -4,6 +4,7 @@ const CACHE = 'fs3d-v2';
 const SHELL = [
   BASE + '/static/app.css',
   BASE + '/static/viewer.js',
+  BASE + '/static/viewer3d.js',
   BASE + '/static/offline.js',
   BASE + '/static/icon.svg',
   BASE + '/static/vendor/three/three.module.min.js',
