@@ -28,7 +28,7 @@
 
 ## 코드 규칙(OWASP)
 
-- 업로드는 접근 코드(`UPLOAD_CODE`)로 막고, 오입력은 IP 별로 제한한다. 클라이언트 IP 는 앞단 프록시가 덮어쓰는 `X-Real-IP` 만 믿는다(`X-Forwarded-For` 는 위조 가능).
+- 업로드는 접근 코드(`UPLOAD_CODE`)로 막고, 오입력은 IP 별로 제한한다. 클라이언트 IP 는 `client_ip(request)` 로만 구한다. 접속자가 보낸 `X-Forwarded-For`·`X-Real-IP` 는 위조할 수 있으므로, 연결 주소가 `FORWARDED_ALLOW_IPS`(기본 127.0.0.1)에 든 앞단 프록시일 때만 그 헤더를 믿는다(`X-Forwarded-For` 는 uvicorn `--proxy-headers` 가 처리). `--forwarded-allow-ips "*"` 는 쓰지 않는다.
 - 모델 소유 확인은 삭제 토큰(`X-Delete-Token`)으로 한다. 토큰은 공개 응답(`public_meta`)에 넣지 않는다. 비교는 `secrets.compare_digest` 로 하고 문자열은 `.encode()` 한다.
 - 사용자 입력(이름·메모·표시 글자)은 서버에서 길이·형식을 검사하고, 화면에는 `textContent` 로 출력한다(`innerHTML` 에 넣지 않는다).
 - 만료는 `meta.expires`(생성 시각 기준)로 계산한다. 폴더 수정시각을 쓰면 저장할 때마다 연장되는 버그가 생긴다.

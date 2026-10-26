@@ -1,5 +1,9 @@
 # nginx 로 HTTPS 를 붙일 때의 예시. 도메인과 인증서 경로만 바꿔 /etc/nginx/conf.d/ 에 두고 nginx -s reload.
 # 이때 .env 에서 HOST=127.0.0.1(직접 설치 시), PUBLIC_BASE_URL=https://firescan.example.org 로 맞춘다.
+# Docker(A) 를 쓰면 .env 에 FORWARDED_ALLOW_IPS=172.16.0.0/12 도 넣는다(없으면 모든 접속자가 같은 IP 로 보여
+# 한 사람의 코드 오입력으로 모두의 업로드가 10분간 막힐 수 있다).
+# 하위 경로(예: /kmy/firescan/)로 내보내려면 location /kmy/firescan/ { proxy_pass http://127.0.0.1:8000/; ... } 로 두고
+# .env 에 BASE_PATH=/kmy/firescan, PUBLIC_BASE_URL=https://<도메인>/kmy/firescan 을 넣는다.
 server {
     listen 443 ssl;
     server_name firescan.example.org;
@@ -14,6 +18,7 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
     }

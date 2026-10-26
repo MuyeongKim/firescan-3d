@@ -35,10 +35,12 @@ sudo ./deploy/install.sh
 | --- | --- | --- |
 | `UPLOAD_CODE` | 묶음마다 새로 생성(GitHub에서 받았으면 처음 실행 때 생성) | 업로드 접근 코드. 처음 실행이 끝날 때 화면에도 표시. 비우면 누구나 업로드 가능 |
 | `PUBLIC_BASE_URL` | 비어 있음 | 공유 링크·QR에 쓸 주소(예: `https://firescan.example.org`). 비우면 접속한 주소를 그대로 씀 |
+| `BASE_PATH` | 비어 있음 | nginx 하위 경로로 서비스할 때 그 경로(예: `/kmy/firescan`). 이때 `PUBLIC_BASE_URL`에도 경로까지 적음 |
 | `PORT` | 8000 | 서버 포트 |
 | `HOST` | 0.0.0.0 | B 방식에서 대기 주소. 앞단에 nginx를 두면 `127.0.0.1` |
 | `MODEL_TTL_DAYS` | 30 | 모델 보관 일수(0이면 무기한) |
 | `MAX_UPLOAD_MB` | 40 | 파일 하나 최대 크기 |
+| `FORWARDED_ALLOW_IPS` | 127.0.0.1 | 앞단 nginx 주소. 이 주소에서 온 요청만 nginx가 알려 준 접속자 IP를 믿음. A 방식 앞에 nginx를 두면 `172.16.0.0/12` |
 
 바꾼 뒤에는 처음과 같은 명령(A 또는 B)을 다시 실행하면 적용됩니다.
 
@@ -48,6 +50,8 @@ HTTP로도 업로드·링크·3D 보기는 모두 됩니다. 다만 휴대폰의
 
 - nginx가 있다면 `deploy/nginx.conf.example`을 참고합니다. `client_max_body_size 200m`이 없으면 업로드가 실패합니다
 - `.env`에 `PUBLIC_BASE_URL=https://<도메인>`, B 방식이면 `HOST=127.0.0.1`도 지정합니다
+- A 방식이면 `.env`에 `FORWARDED_ALLOW_IPS=172.16.0.0/12`도 넣습니다. 빠뜨리면 모든 접속자가 같은 IP로 보여, 한 사람이 코드를 8번 틀리면 모두의 업로드가 10분간 막힙니다
+- 하위 경로(예: `https://<도메인>/kmy/firescan/`)로 내보낼 때는 `BASE_PATH=/kmy/firescan`, `PUBLIC_BASE_URL=https://<도메인>/kmy/firescan`을 지정합니다(nginx 예시 파일 맨 위 설명 참고)
 
 ## 업데이트
 
