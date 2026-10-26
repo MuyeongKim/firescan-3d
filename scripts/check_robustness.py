@@ -69,6 +69,9 @@ def make_variants(out: Path) -> dict[str, tuple[Path, str]]:
     save("08_큰스캔_4000px.jpg", np.clip(big + np.random.default_rng(1).normal(0, 6, big.shape), 0, 255).astype(np.uint8), "ok", 85)
     evac = cv2.imread(str(S / "evac_photo.jpg"))
     save("09_피난안내도_어두움.jpg", np.clip(cv2.GaussianBlur(evac, (0, 0), 1.6).astype(np.float32) * 0.55, 0, 255).astype(np.uint8), "ok_loose", 40)
+    dg = evac.copy(); eh, ew = dg.shape[:2]
+    cv2.line(dg, (int(ew * 0.30), int(eh * 0.55)), (int(ew * 0.48), int(eh * 0.82)), (25, 25, 25), 11)
+    save("19_사선벽_단선도면.png", dg, "ok_loose")                 # 단선 도면의 사선 검출(HoughLinesP): OpenCV 5 는 결과 모양이 달라 예외가 났던 곳
     col = base.copy(); col[g > 200] = (200, 230, 250)
     save("13_컬러방_도면.png", col, "ok")
     p2 = cv2.imread(str(S / "apt_2f.png"))

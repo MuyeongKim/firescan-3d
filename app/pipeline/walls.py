@@ -196,7 +196,8 @@ def single_line_walls(ink: np.ndarray, long: int):
     lines = cv2.HoughLinesP(resid, 1, np.pi / 360, threshold=L, minLineLength=int(2.5 * L), maxLineGap=3)
     out = hv.copy()
     if lines is not None:
-        for x1, y1, x2, y2 in lines[:, 0]:
+        # OpenCV 4 는 (N, 1, 4), OpenCV 5 는 (N, 4) 로 돌려준다 → 어느 쪽이든 (N, 4) 로 맞춰 파이썬 정수로 꺼낸다
+        for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4).tolist():
             cv2.line(out, (x1, y1), (x2, y2), 255, max(1, int(round(stroke))))
     return out, stroke
 
