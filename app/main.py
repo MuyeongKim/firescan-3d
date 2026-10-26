@@ -83,7 +83,7 @@ def audit(event: str, request: Request | None = None, **fields) -> None:
     """감사 기록 한 줄(JSON)을 덧붙인다. 기록 실패가 서비스를 막아서는 안 되므로 오류는 삼킨다."""
     rec = {"t": datetime.now(timezone.utc).isoformat(timespec="seconds"), "ev": event}
     if request is not None:
-        rec["ip"] = (request.client.host if request.client else "?")[:64]
+        rec["ip"] = client_ip(request)[:64]      # 접속자 IP 는 횟수 제한과 같은 방식(client_ip)으로 구한다
     for k, v in fields.items():
         rec[k] = v[:80] if isinstance(v, str) else v
     try:
