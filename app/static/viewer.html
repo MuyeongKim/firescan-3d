@@ -41,7 +41,10 @@
     <svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>
   </button>
 </header>
-<div id="review-badge" class="review-badge" hidden></div>
+<div class="topstack">
+  <div class="legend"><span id="lg-ent" hidden><i class="lg-ent"></i>진입구</span><span><i class="lg-door"></i>문</span><span><i class="lg-win"></i>창</span><span id="scale"></span></div>
+  <div id="review-badge" class="review-badge" hidden></div>
+</div>
 <nav id="chips" class="chips" hidden></nav>
 <canvas id="minimap" hidden aria-label="미니맵 (탭하여 이동)"></canvas>
 
@@ -69,7 +72,6 @@
     <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="m9 21 2-6-2-3 1-4h4l2 4h3M11 15l3 2v4"/></svg>내부</button>
 </div>
 
-<div class="legend"><span id="lg-ent" hidden><i class="lg-ent"></i>진입구</span><span><i class="lg-door"></i>문</span><span><i class="lg-win"></i>창</span><span id="scale"></span></div>
 <div id="annot-bar" class="annot-bar" hidden>
   <div class="ab-kinds" id="ab-kinds" role="radiogroup" aria-label="표시 종류"></div>
   <div class="ab-row">

@@ -12,4 +12,6 @@ COPY app ./app
 
 VOLUME /data
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# 믿을 앞단 프록시는 .env 의 FORWARDED_ALLOW_IPS 로 정한다(uvicorn 이 직접 읽음, 없으면 127.0.0.1).
+# '*' 로 두면 nginx 없이 바로 접속한 사람이 X-Forwarded-For 로 IP 를 속여 횟수 제한을 피할 수 있다.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

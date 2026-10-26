@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import html
 import io
+import ipaddress
 import json
 import os
 import re
@@ -135,6 +136,39 @@ def trim_audit() -> None:
 
 
 BAD_CODE = RateLimit(8, 600)        # 접근 코드 오입력 10분에 8회
+
+# 앞단 프록시(nginx 등)로 믿을 연결 주소. uvicorn --proxy-headers 와 같은 FORWARDED_ALLOW_IPS(IP·CIDR, 쉼표 구분, 기본 127.0.0.1)
+_PROXY_SPEC = [s.strip() for s in os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1").split(",") if s.strip()]
+TRUST_ALL_PROXIES = "*" in _PROXY_SPEC
+TRUSTED_PROXIES = []
+for _s in _PROXY_SPEC:
+    try:
+        TRUSTED_PROXIES.append(ipaddress.ip_network(_s, strict=False))
+    except ValueError:
+        pass
+
+
+def from_trusted_proxy(host: str) -> bool:
+    if TRUST_ALL_PROXIES:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(ip in net for net in TRUSTED_PROXIES)
+
+
+def client_ip(request: Request) -> str:
+    """요청한 사람의 IP(횟수 제한용). X-Forwarded-For 는 uvicorn --proxy-headers 가 믿는 프록시 것만 이미 반영했고,
+    X-Real-IP 는 연결 주소가 믿는 프록시일 때만 쓴다. 직접 접속한 사람이 보낸 헤더는 위조일 수 있어 무시한다."""
+    ip = request.client.host if request.client else "?"
+    real = request.headers.get("x-real-ip", "").strip()
+    if real and from_trusted_proxy(ip):
+        try:
+            return str(ipaddress.ip_address(real))
+        except ValueError:
+            pass
+    return ip
 
 
 TTL_CHOICES = (1, 7, 30)   # 업로드할 때 고를 수 있는 보관 일수(서버 MODEL_TTL_DAYS 가 더 짧으면 그 값이 상한)
@@ -334,7 +368,7 @@ async def create_model(
     x_upload_code: str = Header(default=""),
 ):
     t0 = time.perf_counter()
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     if setting("UPLOAD_CODE", "upload_code"):
         check_upload_code(request, x_upload_code)
     ttl = pick_ttl(ttl_days)   # 잘못된 값은 무거운 처리 전에 거절
@@ -490,7 +524,7 @@ def check_upload_code(request: Request, given: str) -> None:
     code = setting("UPLOAD_CODE", "upload_code")
     if not code:
         raise HTTPException(403, "업로드 접근 코드가 설정되어 있지 않아 이 작업은 사용할 수 없습니다")
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     if BAD_CODE.full(ip):
         audit("code_locked", request, path=request.url.path)
         raise HTTPException(429, "접근 코드 오입력이 많아 10분간 제한됩니다")
