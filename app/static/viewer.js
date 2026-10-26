@@ -2,6 +2,7 @@ const BASE = document.querySelector('meta[name="base-path"]')?.content || '';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { supported as offlineOk, saveModel, isSaved, removeModel, purgeExpired } from './offline.js';
 
 const MID = document.body.dataset.model;
 const $ = (s) => document.querySelector(s);
@@ -67,6 +68,7 @@ async function init() {
     if (!res.ok) throw new Error(res.status === 404 ? 'gone' : 'http');
     meta = await res.json();
   } catch (e) {
+    if (e.message === 'gone') removeModel(BASE, MID);
     fail(e.message === 'gone' ? '링크가 만료되었거나 삭제되었습니다.' : '네트워크에 연결할 수 없습니다.\n신호가 잡히는 곳에서 다시 열어주세요.');
     return;
   }
@@ -83,6 +85,7 @@ async function init() {
   if (meta.expires) badge.textContent += ` · ${new Date(meta.expires).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })} 자동 삭제`;
   badge.hidden = false;
   initAnnots();
+  initSave();
   buildChips();
 
   const loader = new GLTFLoader();
@@ -739,6 +742,46 @@ function setAnnotMode(on) {
 }
 $('#btn-annot').addEventListener('click', () => setAnnotMode(!state.annot));
 $('#annot-done').addEventListener('click', () => setAnnotMode(false));
+
+// ------------------------------------------------------------ 오프라인 저장(미리 저장)
+// 출동 전에 신호가 좋은 곳에서 눌러 두면, 지하·철골 구조물처럼 신호가 약한 곳에서도 열린다(보관기간까지).
+async function initSave() {
+  const btn = $('#btn-save');
+  purgeExpired(BASE).catch(() => {});
+  if (!offlineOk()) return;       // HTTPS 가 아니거나 지원하지 않는 브라우저
+  btn.hidden = false;
+  const label = btn.querySelector('span');
+  const refresh = async () => {
+    const saved = await isSaved(BASE, meta).catch(() => false);
+    btn.classList.toggle('on', saved);
+    btn.setAttribute('aria-pressed', saved);
+    label.textContent = saved ? '저장됨' : '저장';
+    return saved;
+  };
+  await refresh();
+  btn.addEventListener('click', async () => {
+    if (btn.dataset.busy) return;
+    if (await refresh()) {
+      if (!confirm('이 기기에 저장한 모델을 지울까요? (서버의 링크는 그대로입니다)')) return;
+      await removeModel(BASE, MID);
+      await refresh();
+      hint('이 기기의 저장본을 지웠습니다');
+      return;
+    }
+    btn.dataset.busy = '1';
+    try {
+      await saveModel(BASE, meta, (i, n) => { label.textContent = `${i}/${n}`; });
+      const kb = meta.floors.reduce((a, f) => a + (f.glb_kb || 0), 0);
+      const until = meta.expires ? ` · ${new Date(meta.expires).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}까지` : '';
+      hint(`저장됨 · 약 ${kb}KB · 신호가 없어도 열립니다${until}`);
+    } catch {
+      hint('저장하지 못했습니다. 신호가 좋은 곳에서 다시 눌러 주세요');
+    } finally {
+      delete btn.dataset.busy;
+      await refresh();
+    }
+  });
+}
 
 // ------------------------------------------------------------ 미니맵
 const mm = $('#minimap');

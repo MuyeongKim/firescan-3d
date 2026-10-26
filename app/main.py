@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import socket
+import threading
 import time
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -70,6 +71,69 @@ class RateLimit:
 
 
 UPLOADS = RateLimit(30, 600)        # 10분에 30회
+# ------------------------------------------------------------------ 감사 기록
+# 누가(접속 IP) 언제 무엇을 했는지만 남긴다. 접근 코드 값·건물명·메모·표시 글자처럼 민감한 내용은 기록하지 않는다.
+AUDIT_DAYS = int(os.environ.get("AUDIT_DAYS", 90))          # 이 기간이 지난 기록은 정리 작업에서 지운다(0 이하면 지우지 않음)
+AUDIT = Path(os.environ.get("AUDIT_LOG") or (DATA / "audit.jsonl"))
+_audit_lock = threading.Lock()
+
+
+def audit(event: str, request: Request | None = None, **fields) -> None:
+    """감사 기록 한 줄(JSON)을 덧붙인다. 기록 실패가 서비스를 막아서는 안 되므로 오류는 삼킨다."""
+    rec = {"t": datetime.now(timezone.utc).isoformat(timespec="seconds"), "ev": event}
+    if request is not None:
+        rec["ip"] = (request.client.host if request.client else "?")[:64]
+    for k, v in fields.items():
+        rec[k] = v[:80] if isinstance(v, str) else v
+    try:
+        with _audit_lock:
+            AUDIT.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(AUDIT, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def read_audit(limit: int = 200) -> list[dict]:
+    try:
+        lines = AUDIT.read_text("utf-8").splitlines()[-max(1, min(limit, 1000)):]
+    except OSError:
+        return []
+    out = []
+    for ln in reversed(lines):
+        try:
+            out.append(json.loads(ln))
+        except ValueError:
+            continue
+    return out
+
+
+def trim_audit() -> None:
+    """보관 기간(AUDIT_DAYS)이 지난 기록을 지운다."""
+    if AUDIT_DAYS <= 0:
+        return
+    cutoff = datetime.now(timezone.utc) - timedelta(days=AUDIT_DAYS)
+    try:
+        with _audit_lock:
+            lines = AUDIT.read_text("utf-8").splitlines()
+            keep = []
+            for ln in lines:
+                try:
+                    if datetime.fromisoformat(json.loads(ln)["t"]) >= cutoff:
+                        keep.append(ln)
+                except (ValueError, KeyError):
+                    keep.append(ln)
+            if len(keep) != len(lines):
+                tmp = AUDIT.with_suffix(".tmp")
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write("\n".join(keep) + ("\n" if keep else ""))
+                tmp.replace(AUDIT)
+    except OSError:
+        pass
+
+
 BAD_CODE = RateLimit(8, 600)        # 접근 코드 오입력 10분에 8회
 
 
@@ -120,6 +184,7 @@ def cleanup_expired():
             exp = d.stat().st_mtime + TTL_DAYS * 86400 if TTL_DAYS > 0 else None   # 깨진 모델은 기본 기간 뒤 정리
         if exp is not None and exp < now:
             shutil.rmtree(d, ignore_errors=True)
+            audit("expire", id=d.name)
 
 
 @asynccontextmanager
@@ -129,6 +194,7 @@ async def lifespan(_: FastAPI):
     async def janitor():
         while True:
             await asyncio.to_thread(cleanup_expired)
+            await asyncio.to_thread(trim_audit)
             await asyncio.sleep(3600)
 
     task = asyncio.create_task(janitor())
@@ -342,6 +408,8 @@ async def create_model(
         "annotations": [],  # 방 이름·소방시설 표시(업로드한 사람이 편집, 열람자는 읽기만)
     }
     (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+    audit("upload", request, id=mid, floors=len(floors), kb=sum(f.get("glb_kb", 0) for f in floors),
+          ttl=ttl, ms=meta["total_ms"])
     base = share_base(request)
     return JSONResponse({**meta, "url": f"{base}/v/{mid}", "qr": f"{BASE}/qr/{mid}.svg",
                          "local_url": f"{BASE}/v/{mid}"}, status_code=201)
@@ -380,6 +448,7 @@ async def confirm_model(mid: str, request: Request, x_delete_token: str = Header
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
     tmp.replace(path)
+    audit("confirm", request, id=mid)
     return {"confirmed": meta["confirmed"]}
 
 
@@ -390,9 +459,11 @@ def check_upload_code(request: Request, given: str) -> None:
         raise HTTPException(403, "업로드 접근 코드가 설정되어 있지 않아 이 작업은 사용할 수 없습니다")
     ip = request.client.host if request.client else "?"
     if BAD_CODE.full(ip):
+        audit("code_locked", request, path=request.url.path)
         raise HTTPException(429, "접근 코드 오입력이 많아 10분간 제한됩니다")
     if not secrets.compare_digest(given.strip().upper().encode(), code.upper().encode()):
         BAD_CODE.hit(ip)
+        audit("code_fail", request, path=request.url.path)   # 입력한 값은 남기지 않는다
         raise HTTPException(401, "업로드 접근 코드가 올바르지 않습니다")
 
 
@@ -451,6 +522,7 @@ async def put_annotations(mid: str, request: Request, x_delete_token: str = Head
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
     tmp.replace(path)
+    audit("annotations", request, id=mid, count=len(items))
     return {"annotations": items}
 
 
@@ -458,6 +530,7 @@ async def put_annotations(mid: str, request: Request, x_delete_token: str = Head
 def list_models(request: Request, x_upload_code: str = Header(default="")):
     """서버에 보관 중인 모델 목록(업로드 접근 코드 필요). 상황실이 다른 기기에서도 확인·삭제할 수 있게 한다."""
     check_upload_code(request, x_upload_code)
+    audit("list", request)
     rows = []
     for d in DATA.iterdir():
         try:
@@ -475,17 +548,28 @@ def list_models(request: Request, x_upload_code: str = Header(default="")):
     return JSONResponse({"models": rows}, headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/audit")
+def get_audit(request: Request, limit: int = 100, x_upload_code: str = Header(default="")):
+    """최근 감사 기록(업로드 접근 코드 필요). 누가(IP) 언제 업로드·삭제·접근 실패를 했는지 확인한다."""
+    check_upload_code(request, x_upload_code)
+    return JSONResponse({"events": read_audit(limit), "keep_days": AUDIT_DAYS}, headers={"Cache-Control": "no-store"})
+
+
 @app.delete("/api/models/{mid}")
 def delete_model(mid: str, request: Request, x_delete_token: str = Header(default=""), x_upload_code: str = Header(default="")):
     """삭제 토큰(업로드한 기기) 또는 업로드 접근 코드(상황실 등 다른 기기)로 삭제한다."""
     meta = read_meta(mid)
+    by = "token"
     if x_delete_token and secrets.compare_digest(x_delete_token.encode(), meta.get("delete_token", "").encode()):
         pass
     elif x_upload_code:
         check_upload_code(request, x_upload_code)
+        by = "code"
     else:
+        audit("delete_denied", request, id=mid)
         raise HTTPException(403, "삭제 권한이 없습니다")
     shutil.rmtree(model_dir(mid), ignore_errors=True)
+    audit("delete", request, id=mid, by=by)
     return {"deleted": mid}
 
 

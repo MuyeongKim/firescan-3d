@@ -4,6 +4,7 @@ const CACHE = 'fs3d-v2';
 const SHELL = [
   BASE + '/static/app.css',
   BASE + '/static/viewer.js',
+  BASE + '/static/offline.js',
   BASE + '/static/icon.svg',
   BASE + '/static/vendor/three/three.module.min.js',
   BASE + '/static/vendor/three/three.core.min.js',
@@ -31,6 +32,18 @@ async function cacheFirst(req) {
   return res;
 }
 
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+const MODEL_RE = new RegExp(`^${esc(BASE)}/(?:api/models|v|m|qr)/([A-Za-z0-9_-]+)(?:[/.]|$)`);
+
+// 서버가 삭제·만료로 404/410 을 주면 이 기기에 저장해 둔 그 모델의 도면도 함께 지운다
+async function purgeModel(id) {
+  const c = await caches.open(CACHE);
+  for (const k of await c.keys()) {
+    const m = MODEL_RE.exec(new URL(k.url).pathname);
+    if (m && m[1] === id) await c.delete(k);
+  }
+}
+
 async function networkFirst(req) {
   let res;
   try {
@@ -41,7 +54,10 @@ async function networkFirst(req) {
     throw err;
   }
   if (res.ok) (await caches.open(CACHE)).put(req, res.clone());
-  else if (res.status >= 500) {
+  else if (res.status === 404 || res.status === 410) {
+    const m = MODEL_RE.exec(new URL(req.url).pathname);
+    if (m) await purgeModel(m[1]);
+  } else if (res.status >= 500) {
     // 서버 PC가 꺼져 터널이 오류 페이지를 줄 때도 저장해 둔 화면을 보여준다
     const hit = await caches.match(req);
     if (hit) return hit;

@@ -1,8 +1,10 @@
+import { removeModel, purgeExpired } from './offline.js';
 const BASE = document.querySelector('meta[name="base-path"]')?.content || '';
 const $ = (s) => document.querySelector(s);
 const RECENT_KEY = 'fs3d.recent';
 const CODE_KEY = 'fs3d.code';
 const TTL_KEY = 'fs3d.ttl';
+purgeExpired(BASE).catch(() => {});   // 이 기기에 저장된 모델 중 보관기간이 지난 것은 열 때마다 지운다
 const MAX_SIDE = 2600;          // 서버 처리 해상도(2000px)보다 약간 크게만 보내 업로드 시간 단축
 const files = [];               // { file, label, url }
 
@@ -252,6 +254,7 @@ $('#r-reject').addEventListener('click', async () => {
   if (!current || !confirm('인식 결과가 틀렸습니까? 이 모델을 서버에서 삭제하고 처음으로 돌아갑니다.')) return;
   const r = await fetch(`${BASE}/api/models/${current.id}`, { method: 'DELETE', headers: { 'X-Delete-Token': current.delete_token || '' } }).catch(() => null);
   if (!r || !(r.ok || r.status === 404)) { alert('삭제하지 못했습니다. 잠시 후 다시 시도하세요.'); return; }
+  removeModel(BASE, current.id);
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(loadRecent().filter((x) => x.id !== current.id))); } catch { /* */ }
   current = null;
   renderRecent();
@@ -313,6 +316,7 @@ function renderRecent() {
       if (!confirm(`'${it.name || '이름 없는 건물'}' 링크를 서버에서 삭제할까요? 공유한 링크도 열리지 않게 됩니다.`)) return;
       const r = await fetch(`${BASE}/api/models/${it.id}`, { method: 'DELETE', headers: { 'X-Delete-Token': it.token || '' } }).catch(() => null);
       if (r && (r.ok || r.status === 404)) {
+        removeModel(BASE, it.id);
         try { localStorage.setItem(RECENT_KEY, JSON.stringify(loadRecent().filter((x) => x.id !== it.id))); } catch { /* */ }
         renderRecent();
       } else alert('삭제하지 못했습니다');
@@ -331,7 +335,7 @@ $('#rc-all').addEventListener('click', async () => {
   const keep = [];
   for (const it of list) {
     const r = await fetch(`${BASE}/api/models/${it.id}`, { method: 'DELETE', headers: { 'X-Delete-Token': it.token || '' } }).catch(() => null);
-    if (!(r && (r.ok || r.status === 404))) { failed++; keep.push(it); }
+    if (!(r && (r.ok || r.status === 404))) { failed++; keep.push(it); } else removeModel(BASE, it.id);
   }
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(keep)); } catch { /* */ }
   renderRecent();
@@ -380,6 +384,7 @@ async function loadServer() {
     b.onclick = async () => {
       if (!confirm(`'${m.name || '이름 없는 건물'}' 모델을 서버에서 삭제할까요? 공유한 링크도 열리지 않게 됩니다.`)) return;
       if (await srvCall('DELETE', `/api/models/${m.id}`, code)) {
+        removeModel(BASE, m.id);
         try { localStorage.setItem(RECENT_KEY, JSON.stringify(loadRecent().filter((x) => x.id !== m.id))); } catch { /* */ }
         renderRecent(); loadServer();
       }
@@ -393,8 +398,42 @@ $('#srv-all').addEventListener('click', async () => {
   if (!code || !srvModels.length) return;
   if (!confirm(`서버에 보관 중인 모델 ${srvModels.length}개를 모두 삭제할까요? 다른 사람이 올린 것도 포함됩니다. 되돌릴 수 없습니다.`)) return;
   let failed = 0;
-  for (const m of srvModels) if (!(await srvCall('DELETE', `/api/models/${m.id}`, code))) failed++;
+  for (const m of srvModels) { if (!(await srvCall('DELETE', `/api/models/${m.id}`, code))) failed++; else removeModel(BASE, m.id); }
   try { localStorage.setItem(RECENT_KEY, JSON.stringify([])); } catch { /* */ }
   renderRecent(); loadServer();
   if (failed) srvErr(`${failed}개는 삭제하지 못했습니다.`);
+});
+
+// 업로드·삭제·접근 실패 기록(상황실이 누가 언제 했는지 확인). 접근 코드 값·건물명·메모는 서버가 기록하지 않는다.
+const EVENT = {
+  upload: '업로드', delete: '삭제', confirm: '인식 확인', annotations: '표시 편집', list: '목록 조회', expire: '자동 만료',
+  code_fail: '⚠ 코드 오입력', code_locked: '⚠ 코드 입력 제한', delete_denied: '⚠ 삭제 거부',
+};
+$('#audit-load').addEventListener('click', async () => {
+  srvErr('');
+  const code = srvCode();
+  if (!code) return;
+  const r = await srvCall('GET', '/api/audit?limit=100', code);
+  if (!r) return;
+  store.set(CODE_KEY, code);
+  const { events, keep_days: keep } = await r.json();
+  const note = $('#audit-note');
+  note.textContent = `최근 ${events.length}건 · 접속 IP와 모델 번호만 남고 코드·건물명·메모는 기록하지 않습니다 · ${keep > 0 ? keep + '일 뒤 자동 삭제' : '자동 삭제 없음'}`;
+  note.hidden = false;
+  const ul = $('#audit-list');
+  ul.innerHTML = '';
+  if (!events.length) { ul.innerHTML = '<li class="empty">기록이 없습니다.</li>'; return; }
+  for (const ev of events) {
+    const li = document.createElement('li');
+    li.innerHTML = '<div style="min-width:0"><b></b><small></small></div>';
+    li.querySelector('b').textContent = `${EVENT[ev.ev] || ev.ev}${ev.id ? ' · ' + ev.id : ''}`;
+    const bits = [when(ev.t)];
+    if (ev.ip) bits.push(ev.ip);
+    if (ev.floors != null) bits.push(`${ev.floors}개 층 ${ev.kb}KB`);
+    if (ev.ttl != null) bits.push(`${ev.ttl}일 보관`);
+    if (ev.by) bits.push(ev.by === 'code' ? '코드로 삭제' : '토큰으로 삭제');
+    if (ev.count != null) bits.push(`표시 ${ev.count}개`);
+    li.querySelector('small').textContent = bits.join(' · ');
+    ul.appendChild(li);
+  }
 });
