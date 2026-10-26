@@ -1,3 +1,4 @@
+# 직접 사용하는 패키지
 fastapi==0.162.0
 uvicorn==0.54.0
 python-multipart==0.0.32
@@ -8,3 +9,31 @@ pymupdf==2.0
 ezdxf==1.4.5
 segno==1.6.6
 pillow==13.0.0
+
+# 위 패키지가 끌어오는 패키지도 같은 버전으로 고정한다.
+# 고정하지 않으면 보안 검사(OSV-Scanner)가 낡은 버전(anyio 4.9.0, h11 0.9.0 등)으로 가정해 취약점으로 보고하고 GitLab 푸시가 거절된다.
+# 이 Mac 에서 검증한 버전(2026-10). 올릴 때는 scripts/check_samples.py, scripts/check_robustness.py 를 다시 돌린다.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+click==8.5.0
+flatbuffers==25.12.19
+fonttools==4.67.0
+h11==0.16.0
+idna==3.20
+networkx==3.7
+onnxruntime==1.31.0
+opentelemetry-api==1.45.1
+packaging==26.3
+protobuf==7.36.2
+psutil==7.2.2
+pydantic==2.14.1
+pydantic-core==2.50.1
+pymupdf-layout==2.0
+pymupdf4llm==2.0
+pyparsing==3.3.3
+pyyaml==6.0.3
+starlette==1.10.0
+tabulate==0.10.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
