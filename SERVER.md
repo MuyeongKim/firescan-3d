@@ -40,6 +40,8 @@ sudo ./deploy/install.sh
 | `HOST` | 0.0.0.0 | B 방식에서 대기 주소. 앞단에 nginx를 두면 `127.0.0.1` |
 | `MODEL_TTL_DAYS` | 30 | 모델 보관 일수(0이면 무기한) |
 | `MAX_UPLOAD_MB` | 40 | 파일 하나 최대 크기 |
+| `AUDIT_DAYS` | 90 | 감사 기록 보관 일수(지난 기록은 정리 작업이 지움, 0 이하면 안 지움) |
+| `AUDIT_LOG` | `data/audit.jsonl` | 감사 기록 파일 위치. 비우면 기본 위치 |
 | `FORWARDED_ALLOW_IPS` | 127.0.0.1 | 앞단 nginx 주소. 이 주소에서 온 요청만 nginx가 알려 준 접속자 IP를 믿음. A 방식 앞에 nginx를 두면 `172.16.0.0/12` |
 
 바꾼 뒤에는 처음과 같은 명령(A 또는 B)을 다시 실행하면 적용됩니다.
@@ -70,4 +72,5 @@ HTTP로도 업로드·링크·3D 보기는 모두 됩니다. 다만 휴대폰의
 ## 데이터와 제거
 
 - 만든 모델은 `data/` 폴더에 있습니다(백업 대상). 업로드한 원본 파일은 저장하지 않습니다
+- 누가 언제 올리고 지웠는지는 `data/audit.jsonl`에 한 줄씩 남습니다(접근 코드·건물명은 기록하지 않음). 업로드 화면의 '서버 보관 모델 관리' → '업로드·삭제 기록 보기'(업로드 코드 필요)에서도 볼 수 있습니다
 - 제거: A는 `docker compose down`, B는 `sudo systemctl disable --now firescan3d && sudo rm /etc/systemd/system/firescan3d.service`
