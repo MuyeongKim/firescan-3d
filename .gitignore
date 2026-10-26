@@ -8,3 +8,4 @@ dist/
 *.log
 .env
 samples/check_sheet.jpg
+datasets/
