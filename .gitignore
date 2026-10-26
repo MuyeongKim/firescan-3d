@@ -7,3 +7,4 @@ dist/
 .claude/
 *.log
 .env
+samples/check_sheet.jpg
