@@ -1,3 +1,4 @@
+const BASE = document.querySelector('meta[name="base-path"]')?.content || '';
 const $ = (s) => document.querySelector(s);
 const RECENT_KEY = 'fs3d.recent';
 const CODE_KEY = 'fs3d.code';
@@ -97,7 +98,7 @@ const store = {
   set: (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* */ } },
 };
 let codeRequired = false;
-fetch('/api/config').then((r) => r.json()).then((c) => {
+fetch(BASE + '/api/config').then((r) => r.json()).then((c) => {
   codeRequired = !!c.upload_code_required;
   $('#code-field').hidden = !codeRequired;
   $('#code').value = store.get(CODE_KEY);
@@ -124,7 +125,7 @@ $('#go').addEventListener('click', async () => {
   fd.append('wall_height', $('#height').value || '2.8');
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/models');
+  xhr.open('POST', BASE + '/api/models');
   xhr.responseType = 'json';
   if (code) xhr.setRequestHeader('X-Upload-Code', code);
   xhr.upload.onprogress = (e) => {
@@ -157,7 +158,7 @@ function showResult(m, ms) {
   const r = $('#result');
   r.hidden = false;
   $('#r-time').textContent = `${(ms / 1000).toFixed(1)}초`;
-  $('#r-prev').src = `/m/${m.id}/${m.floors[0].preview}`;
+  $('#r-prev').src = `${BASE}/m/${m.id}/${m.floors[0].preview}`;
   $('#r-url').value = m.url;
   $('#r-open').href = m.local_url;
   $('#r-qr').src = m.qr;
@@ -168,7 +169,7 @@ function showResult(m, ms) {
   $('#r-copy').onclick = () => copy(m.url, $('#r-copy'));
   r.scrollIntoView({ behavior: 'smooth', block: 'start' });
   saveRecent({ id: m.id, name: m.name, url: m.url, created: m.created, floors: m.floors.length,
-    preview: `/m/${m.id}/${m.floors[0].preview}`, token: m.delete_token });
+    preview: `${BASE}/m/${m.id}/${m.floors[0].preview}`, token: m.delete_token });
 }
 
 $('#r-new').addEventListener('click', () => {
@@ -219,12 +220,12 @@ function renderRecent() {
     li.querySelector('img').src = it.preview;
     li.querySelector('img').onerror = (e) => { e.target.style.visibility = 'hidden'; };
     const a = li.querySelector('a');
-    a.href = `/v/${it.id}`;
+    a.href = `${BASE}/v/${it.id}`;
     a.textContent = it.name || '이름 없는 건물';
     li.querySelector('small').textContent = `${d.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })} · ${it.floors}개 층`;
     li.querySelector('button').onclick = async () => {
       if (!confirm(`'${it.name || '이름 없는 건물'}' 링크를 서버에서 삭제할까요? 공유한 링크도 열리지 않게 됩니다.`)) return;
-      const r = await fetch(`/api/models/${it.id}`, { method: 'DELETE', headers: { 'X-Delete-Token': it.token || '' } }).catch(() => null);
+      const r = await fetch(`${BASE}/api/models/${it.id}`, { method: 'DELETE', headers: { 'X-Delete-Token': it.token || '' } }).catch(() => null);
       if (r && (r.ok || r.status === 404)) {
         try { localStorage.setItem(RECENT_KEY, JSON.stringify(loadRecent().filter((x) => x.id !== it.id))); } catch { /* */ }
         renderRecent();

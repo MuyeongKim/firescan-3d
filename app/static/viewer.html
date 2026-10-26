@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="ko">
 <head>
+<meta name="base-path" content="{{BASE}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0d1014">
@@ -15,19 +16,19 @@
 <meta property="og:image" content="{{OG_IMAGE}}">
 <meta property="og:url" content="{{OG_URL}}">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="manifest" href="{{BASE}}/manifest.webmanifest">
+<link rel="icon" href="{{BASE}}/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{BASE}}/static/app.css">
 <!-- 임포트맵은 modulepreload 보다 먼저 와야 맨 이름 "three" 가 해석된다 -->
-<script type="importmap">{"imports":{"three":"/static/vendor/three/three.module.min.js","three/addons/":"/static/vendor/three/addons/"}}</script>
-<link rel="modulepreload" href="/static/vendor/three/three.core.min.js">
-<link rel="modulepreload" href="/static/vendor/three/three.module.min.js">
-<link rel="modulepreload" href="/static/vendor/three/addons/controls/OrbitControls.js">
-<link rel="modulepreload" href="/static/vendor/three/addons/loaders/GLTFLoader.js">
-<link rel="modulepreload" href="/static/vendor/three/addons/utils/BufferGeometryUtils.js">
-<link rel="modulepreload" href="/static/vendor/three/addons/utils/SkeletonUtils.js">
-<link rel="modulepreload" href="/static/viewer.js">
-<link rel="preload" href="/api/models/{{MODEL_ID}}" as="fetch" crossorigin="anonymous">
+<script type="importmap">{"imports":{"three":"{{BASE}}/static/vendor/three/three.module.min.js","three/addons/":"{{BASE}}/static/vendor/three/addons/"}}</script>
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/three.core.min.js">
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/three.module.min.js">
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/controls/OrbitControls.js">
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/loaders/GLTFLoader.js">
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/utils/BufferGeometryUtils.js">
+<link rel="modulepreload" href="{{BASE}}/static/vendor/three/addons/utils/SkeletonUtils.js">
+<link rel="modulepreload" href="{{BASE}}/static/viewer.js">
+<link rel="preload" href="{{BASE}}/api/models/{{MODEL_ID}}" as="fetch" crossorigin="anonymous">
 <link rel="preload" href="{{FIRST_GLB}}" as="fetch" crossorigin="anonymous">
 </head>
 <body class="viewer" data-model="{{MODEL_ID}}">
@@ -81,6 +82,6 @@
     <button class="btn" id="share-close">닫기</button>
   </div>
 </div>
-<script type="module" src="/static/viewer.js"></script>
+<script type="module" src="{{BASE}}/static/viewer.js"></script>
 </body>
 </html>

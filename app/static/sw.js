@@ -1,15 +1,16 @@
+const BASE = '{{BASE}}';
 // 한 번 열어본 모델은 현장(지하·철골 구조물 등 신호 불량)에서도 다시 열 수 있도록 캐시한다.
 const CACHE = 'fs3d-v2';
 const SHELL = [
-  '/static/app.css',
-  '/static/viewer.js',
-  '/static/icon.svg',
-  '/static/vendor/three/three.module.min.js',
-  '/static/vendor/three/three.core.min.js',
-  '/static/vendor/three/addons/controls/OrbitControls.js',
-  '/static/vendor/three/addons/loaders/GLTFLoader.js',
-  '/static/vendor/three/addons/utils/BufferGeometryUtils.js',
-  '/static/vendor/three/addons/utils/SkeletonUtils.js',
+  BASE + '/static/app.css',
+  BASE + '/static/viewer.js',
+  BASE + '/static/icon.svg',
+  BASE + '/static/vendor/three/three.module.min.js',
+  BASE + '/static/vendor/three/three.core.min.js',
+  BASE + '/static/vendor/three/addons/controls/OrbitControls.js',
+  BASE + '/static/vendor/three/addons/loaders/GLTFLoader.js',
+  BASE + '/static/vendor/three/addons/utils/BufferGeometryUtils.js',
+  BASE + '/static/vendor/three/addons/utils/SkeletonUtils.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -53,6 +54,6 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const u = new URL(req.url);
   if (u.origin !== location.origin) return;
-  if (u.pathname.startsWith('/m/') || u.pathname.startsWith('/static/vendor/')) e.respondWith(cacheFirst(req));
-  else if (u.pathname.startsWith('/v/') || u.pathname.startsWith('/api/models/') || u.pathname.startsWith('/static/')) e.respondWith(networkFirst(req));
+  if (u.pathname.startsWith(BASE + '/m/') || u.pathname.startsWith(BASE + '/static/vendor/')) e.respondWith(cacheFirst(req));
+  else if (u.pathname.startsWith(BASE + '/v/') || u.pathname.startsWith(BASE + '/api/models/') || u.pathname.startsWith(BASE + '/static/')) e.respondWith(networkFirst(req));
 });

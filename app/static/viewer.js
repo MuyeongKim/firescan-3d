@@ -1,3 +1,4 @@
+const BASE = document.querySelector('meta[name="base-path"]')?.content || '';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -62,7 +63,7 @@ const requestRender = () => { dirty = true; };
 async function init() {
   let res;
   try {
-    res = await fetch(`/api/models/${MID}`);
+    res = await fetch(`${BASE}/api/models/${MID}`);
     if (!res.ok) throw new Error(res.status === 404 ? 'gone' : 'http');
     meta = await res.json();
   } catch (e) {
@@ -84,7 +85,7 @@ async function init() {
       bar.querySelector('i').style.width = `${Math.round((loaded.reduce((a, b) => a + b, 0) / T) * 100)}%`;
     }
   };
-  const jobs = meta.floors.map((f, i) => loader.loadAsync(`/m/${MID}/${f.glb}`, onProg(i))
+  const jobs = meta.floors.map((f, i) => loader.loadAsync(`${BASE}/m/${MID}/${f.glb}`, onProg(i))
     .then((g) => { setupFloor(i, f, g); updateChips(); })
     .catch(() => { updateChips(); }));
 
@@ -719,7 +720,7 @@ loop();
 
 // 오프라인에서도 다시 열 수 있도록 캐시(HTTPS/localhost 에서만 동작)
 if ('serviceWorker' in navigator && window.isSecureContext) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  navigator.serviceWorker.register(BASE + '/sw.js', { scope: BASE + '/' }).catch(() => {});
 }
 
 init();

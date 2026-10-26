@@ -10,6 +10,7 @@ import html
 import io
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -31,6 +32,10 @@ from .pipeline import UnsupportedFile, build_floor, load_pages
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 DATA = Path(os.environ.get("DATA_DIR", ROOT.parent / "data")).resolve()
+# nginx 가 하위 경로(예: /kmy/firescan)로 내보낼 때 화면이 만드는 링크의 앞부분. 비우면 루트(/)에서 서비스
+BASE = os.environ.get("BASE_PATH", "").strip().rstrip("/")
+if BASE and not re.fullmatch(r"/[A-Za-z0-9._~/-]+", BASE):
+    raise SystemExit("BASE_PATH 는 /로 시작하는 영문·숫자·-_./ 경로여야 합니다")
 MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", 40))
 MAX_FILES = 20
 MAX_PAGES = 30                                              # PDF 페이지 포함 한 번에 만들 층 수 상한
@@ -155,9 +160,13 @@ def public_meta(meta: dict) -> dict:
 
 
 # ------------------------------------------------------------------ pages
+def render(name: str) -> str:
+    return (STATIC / name).read_text("utf-8").replace("{{BASE}}", html.escape(BASE))
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(render("index.html"), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/v/{mid}", response_class=HTMLResponse)
@@ -165,17 +174,17 @@ def viewer(mid: str, request: Request):
     try:
         meta = read_meta(mid)
     except HTTPException:
-        return HTMLResponse((STATIC / "missing.html").read_text("utf-8"), status_code=404)
+        return HTMLResponse(render("missing.html"), status_code=404)
     base = share_base(request)
     floors = meta["floors"]
     title = meta.get("name") or "건물 내부구조"
     desc = f"{len(floors)}개 층 · " + " / ".join(f["label"] for f in floors[:6]) + " · 탭하여 3D로 확인"
-    page = (STATIC / "viewer.html").read_text("utf-8")
+    page = render("viewer.html")
     for k, v in {
         "{{TITLE}}": html.escape(title), "{{DESC}}": html.escape(desc),
         "{{OG_IMAGE}}": html.escape(f"{base}/m/{mid}/{floors[0]['preview']}"),
         "{{OG_URL}}": html.escape(f"{base}/v/{mid}"), "{{MODEL_ID}}": html.escape(mid),
-        "{{FIRST_GLB}}": html.escape(f"/m/{mid}/{floors[0]['glb']}"),
+        "{{FIRST_GLB}}": html.escape(f"{BASE}/m/{mid}/{floors[0]['glb']}"),
     }.items():
         page = page.replace(k, v)
     return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
@@ -183,13 +192,13 @@ def viewer(mid: str, request: Request):
 
 @app.get("/sw.js")
 def service_worker():
-    return FileResponse(STATIC / "sw.js", media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+    return Response(render("sw.js"), media_type="text/javascript",
+                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": BASE + "/"})
 
 
 @app.get("/manifest.webmanifest")
 def manifest():
-    return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
+    return Response(render("manifest.webmanifest"), media_type="application/manifest+json")
 
 
 @app.get("/healthz")
@@ -288,8 +297,8 @@ async def create_model(
     }
     (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
     base = share_base(request)
-    return JSONResponse({**meta, "url": f"{base}/v/{mid}", "qr": f"/qr/{mid}.svg",
-                         "local_url": f"/v/{mid}"}, status_code=201)
+    return JSONResponse({**meta, "url": f"{base}/v/{mid}", "qr": f"{BASE}/qr/{mid}.svg",
+                         "local_url": f"{BASE}/v/{mid}"}, status_code=201)
 
 
 @app.get("/api/models/{mid}")

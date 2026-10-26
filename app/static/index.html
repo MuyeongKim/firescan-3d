@@ -1,20 +1,21 @@
 <!doctype html>
 <html lang="ko">
 <head>
+<meta name="base-path" content="{{BASE}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d1014">
 <meta name="robots" content="noindex, nofollow">
 <title>FireScan 3D · 도면으로 내부구조 공유</title>
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon.svg">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="manifest" href="{{BASE}}/manifest.webmanifest">
+<link rel="icon" href="{{BASE}}/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{BASE}}/static/icon.svg">
+<link rel="stylesheet" href="{{BASE}}/static/app.css">
 </head>
 <body class="upload">
 <main class="wrap">
   <header class="brand">
-    <img src="/static/icon.svg" alt="">
+    <img src="{{BASE}}/static/icon.svg" alt="">
     <div>
       <h1>FireScan 3D</h1>
       <p>도면 한 장으로 진입 전 내부구조를 3D로 공유</p>
@@ -74,6 +75,6 @@
 
   <footer>링크를 아는 사람만 열람할 수 있습니다 · 서버 보관 30일<br>자동 인식 결과이므로 실제 구조와 다를 수 있습니다</footer>
 </main>
-<script type="module" src="/static/upload.js"></script>
+<script type="module" src="{{BASE}}/static/upload.js"></script>
 </body>
 </html>
