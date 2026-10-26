@@ -72,6 +72,19 @@ def make_variants(out: Path) -> dict[str, tuple[Path, str]]:
     dg = evac.copy(); eh, ew = dg.shape[:2]
     cv2.line(dg, (int(ew * 0.30), int(eh * 0.55)), (int(ew * 0.48), int(eh * 0.82)), (25, 25, 25), 11)
     save("19_사선벽_단선도면.png", dg, "ok_loose")                 # 단선 도면의 사선 검출(HoughLinesP): OpenCV 5 는 결과 모양이 달라 예외가 났던 곳
+    # 벽을 검게가 아니라 연한 회색(238)으로만 칠한 도면(분양 평면도 방식, 테두리선 없음). 문 호·글자는 그대로 두고,
+    # 방 안에 타일 격자와 건물 밖에 치수선을 더해 '벽이 아닌 선'이 벽으로 잡히지 않는지도 본다.
+    # 테두리선이 있으면 기존 2중선 방식으로도 풀려서 이 기능의 회귀 시험이 되지 않는다
+    wm = cv2.morphologyEx((g < 100).astype(np.uint8) * 255, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)))
+    tone = np.full_like(base, 255)
+    tone[(g < 100) & (wm == 0)] = (20, 20, 20)                         # 문 호·글자 등 가는 획
+    tone[wm > 0] = (238, 238, 238)
+    for x in range(1200, 1560, 40):
+        cv2.line(tone, (x, 700), (x, 1000), (150, 150, 150), 1)       # 타일 격자(가는 회색선)
+    for y in range(700, 1000, 40):
+        cv2.line(tone, (1200, y), (1560, y), (150, 150, 150), 1)
+    cv2.line(tone, (60, 40), (base.shape[1] - 60, 40), (30, 30, 30), 1)  # 건물 바깥 치수선
+    save("20_회색벽_테두리없음.png", tone, "ok_loose")
     col = base.copy(); col[g > 200] = (200, 230, 250)
     save("13_컬러방_도면.png", col, "ok")
     p2 = cv2.imread(str(S / "apt_2f.png"))

@@ -5,6 +5,7 @@
   filled : 벽이 검게 채워진 도면 → 얇은 획(글자·문 호·가구·치수) 제거
   double : 2중선/해치 벽(CAD 출력) → 선 사이 공동을 메운 뒤 filled와 동일 처리
   single : 단선 도면(피난안내도·스케치) → 직선 성분만 벽으로 사용
+벽을 검게가 아니라 연한 회색으로 칠한 도면(분양 평면도)은 tone_fill_walls 가 그 띠를 잉크로 바꿔 filled 로 처리한다.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import cv2
 import numpy as np
 
 WALL_T_M = 0.2           # 벽 두께 추정 기준(국내 주거/업무시설 평균)
+WALL_T_RANGE_M = (0.15, 0.40)   # 문 폭으로 구한 축척이 이 범위 밖의 벽 두께를 낳으면 문 검출을 믿지 않는다(내력벽·외벽 기준)
 DOOR_M = 0.9             # 문 폭 기준(단선 도면 축척 추정용)
 ASSUMED_SPAN_M = 20.0    # 축척 단서가 없을 때 건물 긴 변 가정
 DOOR_GAP_M = (0.68, 1.3)
@@ -78,6 +80,43 @@ def binarize(bgr: np.ndarray) -> np.ndarray:
     vivid = (hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 70)   # 빨간 피난화살표, 초록 비상구 등 컬러 표식 제외
     ink = (dark & ~vivid).astype(np.uint8) * 255
     return cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8)) if spread > 25 else ink
+
+
+def tone_fill_walls(bgr: np.ndarray, dark: np.ndarray) -> np.ndarray | None:
+    """벽을 검게가 아니라 연한 회색(색조)으로 칠한 도면(분양 평면도 등)이면 그 띠를 잉크 마스크로 돌려준다. 아니면 None.
+    binarize 는 어두운 획만 잉크로 보므로 이런 벽은 통째로 빠지고, 테두리선·치수선·타일선만 남아 단선 도면으로 오인된다.
+    색칠한 방·회색 용지·사진 같은 오탐을 막으려고 아래를 모두 요구한다: 흰 배경이 지배적, 한 가지 회색이 어두운 선 다음으로 많고,
+    그 띠가 얇은 구조(두께·면적 제한)이며 한 덩어리로 이어진 벽망."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    H, W = gray.shape
+    long = max(H, W)
+    hist = np.bincount(gray.ravel(), minlength=256).astype(np.float64)
+    if hist[251:].sum() < 0.55 * gray.size:             # 깨끗한 디지털 도면(흰 배경)만. 사진·스캔은 배경이 흰색으로 포화되지 않는다
+        return None
+    sm = np.convolve(hist, np.ones(5) / 5, mode="same")
+    peak = 120 + int(np.argmax(sm[120:249]))              # 연한~중간 회색 봉우리(검정 선·흰 배경 제외)
+    band = (np.abs(gray.astype(np.int16) - peak) <= 6)
+    share = band.mean()
+    nonwhite = max(1.0 - hist[251:].sum() / gray.size, 1e-6)
+    if share < 0.012 or share < 0.3 * nonwhite:
+        return None
+    k = max(3, int(round(0.004 * long)))                  # 선 가장자리의 번짐(얇은 줄)은 열기로 지운다
+    mask = cv2.morphologyEx(band.astype(np.uint8) * 255, cv2.MORPH_OPEN, _rect(k, k))
+    if mask.mean() / 255 < 0.01 or mask.mean() / 255 > 0.3:
+        return None
+    dt = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+    thick = 2.0 * float(np.median(dt[mask > 0]))
+    if not (2 <= thick <= 0.04 * long):                    # 벽 두께 범위. 색칠한 방(두꺼운 덩어리)은 여기서 걸러진다
+        return None
+    n, _, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if n < 2 or st[1:, 4].max() < 0.1 * (mask > 0).sum():  # 벽은 서로 이어진 망 — 흩어진 조각이면 벽이 아니다
+        return None
+    near = cv2.dilate(mask, _rect(7, 7)) > 0               # 벽 띠에 붙은 어두운 테두리·치수선으로 끊긴 곳을 잇는다
+    ink = mask | ((dark > 0) & near).astype(np.uint8) * 255
+    ink = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, _rect(5, 5))
+    # 벽 위에 덮인 흰 라벨 상자("2구", 치수 글자)로 띠가 짧게 끊긴 곳은 벽 방향으로만 잇는다. 길이는 문 폭(벽 두께의 약 3배 이상)보다 짧게 잡아 진짜 문은 메우지 않는다
+    L = max(5, int(round(2.2 * thick))) | 1
+    return cv2.morphologyEx(cv2.morphologyEx(ink, cv2.MORPH_CLOSE, _rect(L, 1)), cv2.MORPH_CLOSE, _rect(1, L))
 
 
 def remove_clutter(ink: np.ndarray) -> np.ndarray:
@@ -375,8 +414,15 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
     long = max(H, W)
     notes: list[str] = []
     ink_orig = binarize(bgr)
+    gap_src = ink_orig          # 개구부 안의 선(창 선·문짝)을 찾는 근거
     if ink is None:
-        ink = ink_orig
+        ink = tone_fill_walls(bgr, ink_orig)
+        if ink is not None:
+            notes.append("연한 회색으로 칠한 벽 인식")
+            # 이런 도면은 창·문짝을 청록 같은 색 선으로 그리는 일이 많다. binarize 는 색 있는 선을 빼므로, 벽 색보다 어두운 선은 모두 근거로 쓴다
+            gap_src = (cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) < 215).astype(np.uint8) * 255
+        else:
+            ink = ink_orig
     clean = remove_clutter(ink)
 
     mode, base, ko = "filled", clean, None
@@ -412,16 +458,19 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
     # 개구부(픽셀 단위) → 축척 결정
     single = mode == "single"
     min_run = (2.5 * t + 2) if single else 1.25 * t
-    gaps = find_gaps(walls, None if single else ink_orig, t, int(0.25 * long), min_run)
+    gaps = find_gaps(walls, None if single else gap_src, t, int(0.25 * long), min_run)
+    ds = None if (width_m or m_per_px) else door_scale(gaps, t, single)
     if width_m:
         m_per_px, scale_source = width_m / max(xs.max() - xs.min(), 1), "user"
     elif m_per_px:
         scale_source = "dxf"
-    elif (ds := door_scale(gaps, t, single)):
+    elif ds and (single or WALL_T_RANGE_M[0] <= t * ds[0] <= WALL_T_RANGE_M[1]):
         m_per_px, scale_source = ds[0], "door"
         notes.append(f"문 {ds[1]}개 폭으로 축척 추정")
     elif not single:
         m_per_px, scale_source = WALL_T_M / t, "wall"
+        if ds:   # 문 폭 축척으로 벽 두께를 되짚으면 비현실적이다 → 문 검출이 틀렸을 가능성이 높아 벽 두께 기준을 쓴다
+            notes.append(f"문 {ds[1]}개 폭으로 구한 축척이 벽 두께와 맞지 않아(문 검출 오류 가능) 벽 두께 {WALL_T_M}m 기준으로 추정했습니다")
     else:
         m_per_px, scale_source = ASSUMED_SPAN_M / span_px, "assumed"
 
