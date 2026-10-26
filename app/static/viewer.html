@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>{{TITLE}} · 3D 내부구조</title>
+<meta name="description" content="{{DESC}}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{TITLE}} · 3D 내부구조">
+<meta property="og:description" content="{{DESC}}">
+<meta property="og:image" content="{{OG_IMAGE}}">
+<meta property="og:url" content="{{OG_URL}}">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<!-- 임포트맵은 modulepreload 보다 먼저 와야 맨 이름 "three" 가 해석된다 -->
+<script type="importmap">{"imports":{"three":"/static/vendor/three/three.module.min.js","three/addons/":"/static/vendor/three/addons/"}}</script>
+<link rel="modulepreload" href="/static/vendor/three/three.core.min.js">
+<link rel="modulepreload" href="/static/vendor/three/three.module.min.js">
+<link rel="modulepreload" href="/static/vendor/three/addons/controls/OrbitControls.js">
+<link rel="modulepreload" href="/static/vendor/three/addons/loaders/GLTFLoader.js">
+<link rel="modulepreload" href="/static/vendor/three/addons/utils/BufferGeometryUtils.js">
+<link rel="modulepreload" href="/static/vendor/three/addons/utils/SkeletonUtils.js">
+<link rel="modulepreload" href="/static/viewer.js">
+<link rel="preload" href="/api/models/{{MODEL_ID}}" as="fetch" crossorigin="anonymous">
+<link rel="preload" href="{{FIRST_GLB}}" as="fetch" crossorigin="anonymous">
+</head>
+<body class="viewer" data-model="{{MODEL_ID}}">
+<canvas id="c" tabindex="0" aria-label="3D 내부구조"></canvas>
+
+<header class="vbar">
+  <div class="vtitle"><h1 id="title">{{TITLE}}</h1><p id="sub">불러오는 중…</p></div>
+  <button class="icon-btn accent" id="btn-share" aria-label="공유">
+    <svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>
+  </button>
+</header>
+<nav id="chips" class="chips" hidden></nav>
+<canvas id="minimap" hidden aria-label="미니맵 (탭하여 이동)"></canvas>
+
+<aside class="tools">
+  <button data-toggle="xray" aria-pressed="false">
+    <svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>투시</button>
+  <button data-toggle="plan" class="on" aria-pressed="true">
+    <svg class="i" viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M9 5v8h6M15 9v10"/></svg>도면</button>
+  <button data-toggle="measure" aria-pressed="false">
+    <svg class="i" viewBox="0 0 24 24"><path d="m3 17 14-14 4 4L7 21z"/><path d="m7 9 2 2m1-5 2 2m1-5 2 2"/></svg>거리</button>
+  <button id="btn-reset">
+    <svg class="i" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg>처음</button>
+</aside>
+
+<div class="modes" role="tablist">
+  <button data-mode="orbit" class="on" role="tab">
+    <svg class="i" viewBox="0 0 24 24"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>3D</button>
+  <button data-mode="top" role="tab">
+    <svg class="i" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 11h9V4M13 15v5"/></svg>평면</button>
+  <button data-mode="walk" role="tab">
+    <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="m9 21 2-6-2-3 1-4h4l2 4h3M11 15l3 2v4"/></svg>내부</button>
+</div>
+
+<div class="legend"><span id="lg-ent" hidden><i class="lg-ent"></i>진입구</span><span><i class="lg-door"></i>문</span><span><i class="lg-win"></i>창</span><span id="scale"></span></div>
+<div id="hint" class="hint"></div>
+<div id="labels"></div>
+
+<div id="loading" class="loading">
+  <div class="spinner"></div>
+  <p id="load-msg">3D 모델 불러오는 중…</p>
+  <div class="bar indet"><i></i></div>
+</div>
+
+<div id="share-modal" class="modal" hidden>
+  <div class="sheet">
+    <h2>링크 공유</h2>
+    <p>QR을 다른 단말 카메라로 스캔하거나 링크를 보내세요</p>
+    <img id="qr-img" alt="QR 코드">
+    <div class="linkbox"><input id="share-url" readonly><button class="btn" id="share-copy">복사</button></div>
+    <button class="btn" id="share-close">닫기</button>
+  </div>
+</div>
+<script type="module" src="/static/viewer.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+.venv/
+data/
+samples/
+scripts/
+.claude/
+**/__pycache__/
+*.pyc
+.DS_Store
+.git/

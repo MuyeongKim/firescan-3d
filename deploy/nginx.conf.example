@@ -1,0 +1,26 @@
+# nginx 로 HTTPS 를 붙일 때의 예시. 도메인과 인증서 경로만 바꿔 /etc/nginx/conf.d/ 에 두고 nginx -s reload.
+# 이때 .env 에서 HOST=127.0.0.1(직접 설치 시), PUBLIC_BASE_URL=https://firescan.example.org 로 맞춘다.
+server {
+    listen 443 ssl;
+    server_name firescan.example.org;
+
+    ssl_certificate     /etc/letsencrypt/live/firescan.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/firescan.example.org/privkey.pem;
+
+    # nginx 기본값(1MB)이면 도면 업로드가 실패한다
+    client_max_body_size 200m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 80;
+    server_name firescan.example.org;
+    return 301 https://$host$request_uri;
+}

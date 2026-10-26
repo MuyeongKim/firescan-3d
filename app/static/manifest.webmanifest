@@ -1,0 +1,11 @@
+{
+  "name": "FireScan 3D",
+  "short_name": "FireScan",
+  "description": "도면으로 진입 전 내부구조를 3D로 확인·공유",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1014",
+  "theme_color": "#0d1014",
+  "lang": "ko",
+  "icons": [{ "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

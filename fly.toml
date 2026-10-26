@@ -1,0 +1,34 @@
+# Fly.io 상시 배포 설정 — 배포는 ./deploy/fly.sh <앱이름> (앱 이름은 실행 시 -a 로 덮어씀)
+app = "firescan-3d"
+primary_region = "nrt"          # 도쿄: 한국에서 가장 가까운 Fly 지역(서울 없음)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_DIR = "/data"
+  MODEL_TTL_DAYS = "30"
+
+# 생성된 모델(GLB·미리보기)을 재배포·재시작 뒤에도 유지
+[mounts]
+  source = "firescan_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"    # 잠들지 않음: 첫 접속 지연(콜드 스타트) 없음
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/healthz"
+
+# 도면 한 장 처리에 최대 약 0.7GB, 두 층 동시 처리 약 0.75GB(로컬 측정) → 2GB
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
