@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 WALL_T_M = 0.2           # 벽 두께 추정 기준(국내 주거/업무시설 평균)
+HATCH_INK_SHARE = 0.55          # 빗금 벽 판정: 전체 잉크 중 촘촘한 띠 안의 비율 하한
 WALL_T_RANGE_M = (0.15, 0.40)   # 문 폭으로 구한 축척이 이 범위 밖의 벽 두께를 낳으면 문 검출을 믿지 않는다(내력벽·외벽 기준)
 DOOR_M = 0.9             # 문 폭 기준(단선 도면 축척 추정용)
 ASSUMED_SPAN_M = 20.0    # 축척 단서가 없을 때 건물 긴 변 가정
@@ -119,11 +120,13 @@ def tone_fill_walls(bgr: np.ndarray, dark: np.ndarray) -> np.ndarray | None:
     return cv2.morphologyEx(cv2.morphologyEx(ink, cv2.MORPH_CLOSE, _rect(L, 1)), cv2.MORPH_CLOSE, _rect(1, L))
 
 
-def hatch_fill_walls(bgr: np.ndarray) -> np.ndarray | None:
+def hatch_fill_walls(bgr: np.ndarray, dark: np.ndarray) -> np.ndarray | None:
     """CAD 의 빗금(해치) 벽처럼 가는 선이 촘촘히 몰려 두꺼운 띠가 된 벽을 잉크 마스크로 돌려준다. 아니면 None.
     이런 벽은 가는 선·중간 회색 빗금이 섞여 binarize 의 잉크가 부서지고 획 폭 분포는 1~3px 선이 지배해, filled·double 어느 쪽도
     고르지 못하고 단선으로 빠진다. 가구선·치수선은 밀도가 낮아 걸러진다. 흰 배경이 지배적일 것, 띠의 면적·두께 범위, 연결된
-    벽망일 것을 요구하고, 호출하는 쪽은 기존 방식이 단선으로 빠졌을 때만 쓰며 그래도 단선이면 되돌린다."""
+    벽망일 것, 그리고 **전체 잉크의 55% 이상이 이 띠 안에 있을 것**을 요구한다(빗금 벽 도면은 잉크 대부분이 빗금 띠이고, 속이 빈 이중선
+    도면은 테두리·치수·글자 같은 가는 선이 대부분이다. AI허브 평면도 33개에서 속 빈 이중선 도면은 0.14~0.45, 실제 빗금 도면은 0.65 였다).
+    호출하는 쪽은 기존 방식이 단선으로 빠졌을 때만 쓰며 그래도 단선이면 되돌린다."""
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     H, W = gray.shape
     long = max(H, W)
@@ -143,6 +146,9 @@ def hatch_fill_walls(bgr: np.ndarray) -> np.ndarray | None:
         return None
     n, _, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     if n < 2 or st[1:, 4].max() < 0.1 * (mask > 0).sum():  # 벽은 서로 이어진 망 — 흩어진 조각이면 벽이 아니다
+        return None
+    d = dark > 0
+    if (d & (mask > 0)).sum() < HATCH_INK_SHARE * max(d.sum(), 1):   # 잉크 대부분이 촘촘한 띠가 아니면 빗금 벽 도면이 아니다
         return None
     return mask
 
@@ -476,7 +482,7 @@ def extract(bgr: np.ndarray, ink: np.ndarray | None = None, m_per_px: float | No
     notes += nts
     if mode == "single" and auto_ink and not tone:
         # 단선으로 빠졌어도 빗금 벽 도면일 수 있다 → 촘촘한 선 띠를 벽으로 읽어 다시 판별하고, 그래도 단선이면 처음 판정을 쓴다
-        hatch = hatch_fill_walls(bgr)
+        hatch = hatch_fill_walls(bgr, ink_orig)
         if hatch is not None:
             c2 = remove_clutter(hatch)
             m2, b2, k2, n2 = decide(c2)
