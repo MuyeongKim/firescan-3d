@@ -114,12 +114,12 @@ def overlay(img, masks: dict[str, np.ndarray]) -> np.ndarray:
     return cv2.addWeighted(out, 0.55, img, 0.45, 0)
 
 
-def score_image(job: tuple[str, str, str | None, str]) -> list[dict]:
+def score_image(job: tuple[str, str, str | None, str, float]) -> list[dict]:
     from app.pipeline import walls as W
     from app.pipeline.loaders import _fit
     from app.pipeline.walls import extract
 
-    img_path, lab_path, viz, disable = job
+    img_path, lab_path, viz, disable, viz_below = job
     # 기능을 하나씩 꺼 보는 비교(ablation): --disable hatch,tone
     if "hatch" in disable.split(","):
         W.hatch_fill_walls = lambda *_a, **_k: None
@@ -168,10 +168,12 @@ def score_image(job: tuple[str, str, str | None, str]) -> list[dict]:
         dp = comps_ok(pdoor, gt["door"], tol)
         wp = comps_ok(pwin, gt["window"], tol)
         row.update(status="ok", f1=f1, prec=prec, rec=rec, tol=tol, thick_gt=round(thick, 1), mode=r.mode, scale=r.scale_source,
+                   t_px=round(float(r.t_px), 1), long_px=max(shp), hatch=int(any("빗금" in n for n in r.notes)),
+                   tone=int(any("회색" in n for n in r.notes)), walls_share=round(float((r.walls > 0).mean()), 4),
                    rooms=r.rooms, door_hit=dh, door_open_hit=doh, win_hit=wh, win_open_hit=woh,
                    door_pred_ok=dp[0], door_pred=dp[1], win_pred_ok=wp[0], win_pred=wp[1])
         rows.append(row)
-        if viz:
+        if viz and f1 < viz_below:
             left = overlay(fit, {k: gt[k] for k in ("wall", "window", "door")})
             right = overlay(fit, {"wall": r.walls, "window": pwin, "door": pdoor})
             side = np.hstack([left, np.full((shp[0], 6, 3), 255, np.uint8), right])
@@ -191,11 +193,21 @@ def main() -> int:
     ap.add_argument("--csv", type=Path)
     ap.add_argument("--worst", type=int, default=8)
     ap.add_argument("--disable", default="", help="끌 기능(쉼표): hatch=빗금 벽 경로, tone=회색 벽 경로. 효과가 있는지 비교할 때 쓴다")
+    ap.add_argument("--exclude", type=Path, help="이 폴더에 있는 이미지와 같은 이름은 제외(규칙을 조정할 때 눈으로 본 도면을 빼 공정하게 평가)")
+    ap.add_argument("--viz-below", type=float, default=1.01, help="벽 F1 이 이 값보다 낮은 평면도만 --viz 로 저장(기본: 전부)")
+    ap.add_argument("--random", type=int, help="무작위 N 장(--seed)")
+    ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
 
     labs = {p.stem.lower(): p for p in a.labels.rglob("*.json")}
-    imgs = [p for p in sorted(a.images.rglob("*")) if p.suffix.lower() == ".png" and p.stem.lower() in labs]
-    if a.limit:
+    skip = {p.stem.lower() for p in a.exclude.rglob("*") if p.suffix.lower() == ".png"} if a.exclude else set()
+    imgs = [p for p in sorted(a.images.rglob("*")) if p.suffix.lower() == ".png" and p.stem.lower() in labs and p.stem.lower() not in skip]
+    if skip:
+        print(f"제외 {len(skip)}장(--exclude)")
+    if a.random:
+        import random
+        imgs = random.Random(a.seed).sample(imgs, min(a.random, len(imgs)))
+    elif a.limit:
         imgs = imgs[:a.limit]
     if not imgs:
         print("이미지와 라벨이 짝지어진 파일이 없습니다(파일 이름이 같아야 합니다)")
@@ -203,7 +215,7 @@ def main() -> int:
     if a.viz:
         a.viz.mkdir(parents=True, exist_ok=True)
     print(f"{len(imgs)}장 채점 (병렬 {a.workers}) …")
-    jobs = [(str(p), str(labs[p.stem.lower()]), str(a.viz) if a.viz else None, a.disable) for p in imgs]
+    jobs = [(str(p), str(labs[p.stem.lower()]), str(a.viz) if a.viz else None, a.disable, a.viz_below) for p in imgs]
     rows: list[dict] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
@@ -248,7 +260,8 @@ def main() -> int:
         print(f"  {r['image']} p{r['plan']}  F1 {r['f1']:.2f}  {r.get('mode', r['status'])}  정답 두께 {r.get('thick_gt', '-')}px")
 
     if a.csv:
-        cols = ["image", "plan", "status", "f1", "prec", "rec", "mode", "scale", "rooms", "thick_gt", "tol", "gt_doors", "door_hit", "door_open_hit",
+        cols = ["image", "plan", "status", "f1", "prec", "rec", "mode", "scale", "rooms", "thick_gt", "t_px", "long_px", "hatch", "tone",
+                "walls_share", "tol", "gt_doors", "door_hit", "door_open_hit",
                 "door_pred", "door_pred_ok", "gt_windows", "win_hit", "win_open_hit", "win_pred", "win_pred_ok", "ms"]
         with a.csv.open("w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
