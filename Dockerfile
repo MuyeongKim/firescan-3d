@@ -10,6 +10,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 
+# root 가 아닌 전용 사용자로 실행한다(컨테이너가 뚫려도 이미지·호스트에 미치는 범위를 줄임).
+# 호스트의 data/ 를 연결할 때는 docker-compose.yml 의 user 가 그 폴더를 쓸 수 있는 번호(FS_UID·FS_GID)로 바꿔 준다.
+RUN useradd --system --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin firescan \
+    && mkdir -p /data && chown firescan:firescan /data
+USER firescan
+
 VOLUME /data
 EXPOSE 8000
 # 믿을 앞단 프록시는 .env 의 FORWARDED_ALLOW_IPS 로 정한다(uvicorn 이 직접 읽음, 없으면 127.0.0.1).

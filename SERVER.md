@@ -15,6 +15,8 @@
 ./deploy/docker-up.sh
 ```
 
+컨테이너는 root가 아닌 사용자로 실행됩니다. 이 스크립트가 실행한 사용자의 번호로 맞춰 주므로 `data/`에 그대로 쓸 수 있습니다. `docker compose up`을 직접 실행하면 번호 10001로 돌아서 `data/` 권한을 직접 맞춰야 할 수 있으니, 가급적 이 스크립트로 실행하세요.
+
 ## B. Docker 없이 직접 설치
 
 ```bash
@@ -68,6 +70,7 @@ HTTP로도 업로드·링크·3D 보기는 모두 됩니다. 다만 휴대폰의
 | 업로드하면 413 오류 | nginx의 `client_max_body_size` |
 | 공유 링크 주소가 틀림 | `.env`의 `PUBLIC_BASE_URL` 지정 |
 | "Python 3.12 이상이 필요" | A 방식을 쓰거나 Python 3.12 설치(Ubuntu: `sudo apt install python3.12 python3.12-venv`) |
+| A 방식에서 업로드가 실패하고 로그에 `Permission denied` | `data/`를 이전에 root로 돌던 Docker가 만들었기 때문입니다. `sudo chown -R $(id -u):$(id -g) data`를 한 번 실행한 뒤 `./deploy/docker-up.sh`를 다시 실행하세요(스크립트가 이런 경우를 미리 알려 줍니다) |
 
 ## 데이터와 제거
 

@@ -5,6 +5,9 @@ services:
     build: .
     image: firescan3d:latest
     restart: unless-stopped
+    # root 가 아닌 번호로 실행. ./deploy/docker-up.sh 가 이 폴더를 실행한 사용자의 번호(FS_UID·FS_GID)를 정해 주어 ./data 에 쓸 수 있다.
+    # docker compose 를 직접 실행하면 10001 로 돌므로 ./data 의 주인이 달라 쓰기 오류가 나면 `sudo chown -R 10001:10001 data` 를 한 번 실행한다.
+    user: "${FS_UID:-10001}:${FS_GID:-10001}"
     ports:
       - "${PORT:-8000}:8000"
     env_file: .env
