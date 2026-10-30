@@ -125,6 +125,8 @@ def score_image(job: tuple[str, str, str | None, str, float]) -> list[dict]:
         W.hatch_fill_walls = lambda *_a, **_k: None
     if "tone" in disable.split(","):
         W.tone_fill_walls = lambda *_a, **_k: None
+    if "heavy" in disable.split(","):
+        W.prefer_heavy_lines = lambda ink, hv, *_a, **_k: hv
     stem = Path(img_path).stem
     polys, W, H = load_gt(Path(lab_path))
     im = cv2.imread(img_path, cv2.IMREAD_COLOR)
